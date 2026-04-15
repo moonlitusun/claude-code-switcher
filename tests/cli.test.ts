@@ -1,30 +1,31 @@
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-const { createProgram } = require("../src/cli");
+import { beforeEach, describe, expect, test } from "bun:test";
 
-function writeJson(file, value) {
+import { createProgram } from "../src/cli";
+
+function writeJson(file: string, value: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(value, null, 2));
 }
 
 describe("cli", () => {
-  let tmpHome;
-  let claudeDir;
-  let logs;
-  let errors;
-  let logger;
+  let claudeDir: string;
+  let logs: string[];
+  let errors: string[];
+  let logger: { log: (message: string) => void; error: (message: string) => void };
 
   beforeEach(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-switcher-cli-"));
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-switcher-cli-"));
     claudeDir = path.join(tmpHome, ".claude");
     fs.mkdirSync(claudeDir, { recursive: true });
     logs = [];
     errors = [];
     logger = {
-      log: (message) => logs.push(message),
-      error: (message) => errors.push(message),
+      log: (message: string) => logs.push(message),
+      error: (message: string) => errors.push(message),
     };
   });
 
@@ -53,7 +54,7 @@ describe("cli", () => {
     const program = createProgram({ claudeDir, logger });
     await program.parseAsync(["node", "cc-switcher", "profiles", "--json"], { from: "node" });
 
-    const payload = JSON.parse(logs[0]);
+    const payload = JSON.parse(logs[0]) as { active: string; profiles: string[] };
     expect(payload.active).toBe("local-gateway");
     expect(payload.profiles).toEqual(["local-gateway", "openrouter"]);
   });
@@ -71,7 +72,7 @@ describe("cli", () => {
     const program = createProgram({ claudeDir, logger });
     await program.parseAsync(["node", "cc-switcher", "current", "--json"], { from: "node" });
 
-    const payload = JSON.parse(logs[0]);
+    const payload = JSON.parse(logs[0]) as { activeProfile: string; model: string; baseUrl: string };
     expect(payload.activeProfile).toBe("openrouter");
     expect(payload.model).toBe("anthropic/claude-sonnet-4.6");
     expect(payload.baseUrl).toBe("https://openrouter.ai/api");
@@ -94,9 +95,7 @@ describe("cli", () => {
       ],
     });
 
-    await program.parseAsync(["node", "cc-switcher", "models", "openrouter", "anthropic"], {
-      from: "node",
-    });
+    await program.parseAsync(["node", "cc-switcher", "models", "openrouter", "anthropic"], { from: "node" });
 
     expect(logs).toEqual(["anthropic/claude-sonnet-4.6"]);
   });
@@ -118,11 +117,9 @@ describe("cli", () => {
       ],
     });
 
-    await program.parseAsync(["node", "cc-switcher", "models", "openrouter", "anthropic", "--json"], {
-      from: "node",
-    });
+    await program.parseAsync(["node", "cc-switcher", "models", "openrouter", "anthropic", "--json"], { from: "node" });
 
-    const payload = JSON.parse(logs[0]);
+    const payload = JSON.parse(logs[0]) as { profile: string; vendor: string; models: string[] };
     expect(payload.profile).toBe("openrouter");
     expect(payload.vendor).toBe("anthropic");
     expect(payload.models).toEqual(["anthropic/claude-sonnet-4.6"]);
@@ -156,12 +153,15 @@ describe("cli", () => {
         { id: "anthropic/claude-sonnet-4.6" },
         { id: "openai/gpt-5-codex" },
       ],
-      select: async () => answers.shift(),
+      select: async () => answers.shift() || "",
     });
 
     await program.parseAsync(["node", "cc-switcher", "pick"], { from: "node" });
 
-    const active = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8"));
+    const active = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) as {
+      env: Record<string, string>;
+      model: string;
+    };
     expect(active.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
     expect(active.model).toBe("anthropic/claude-sonnet-4.6");
     expect(logs.join("\n")).toContain("Switched to profile: openrouter");
@@ -180,7 +180,7 @@ describe("cli", () => {
       model: "old-model",
     });
 
-    const capturedChoices = [];
+    const capturedChoices: Array<{ message: string; choices: string[] }> = [];
     const answers = ["openrouter", "openai/gpt-5-codex"];
     const program = createProgram({
       claudeDir,
@@ -191,13 +191,11 @@ describe("cli", () => {
       ],
       select: async (message, choices) => {
         capturedChoices.push({ message, choices });
-        return answers.shift();
+        return answers.shift() || "";
       },
     });
 
-    await program.parseAsync(["node", "cc-switcher", "pick", "--vendor", "openai"], {
-      from: "node",
-    });
+    await program.parseAsync(["node", "cc-switcher", "pick", "--vendor", "openai"], { from: "node" });
 
     expect(capturedChoices[1].choices).toEqual(["openai/gpt-5-codex"]);
   });
@@ -214,7 +212,7 @@ describe("cli", () => {
       model: "old-model",
     });
 
-    const capturedChoices = [];
+    const capturedChoices: Array<{ message: string; choices: string[] }> = [];
     const answers = ["openrouter", "anthropic", "anthropic/claude-sonnet-4.6"];
     const program = createProgram({
       claudeDir,
@@ -225,13 +223,11 @@ describe("cli", () => {
       ],
       select: async (message, choices) => {
         capturedChoices.push({ message, choices });
-        return answers.shift();
+        return answers.shift() || "";
       },
     });
 
-    await program.parseAsync(["node", "cc-switcher", "pick"], {
-      from: "node",
-    });
+    await program.parseAsync(["node", "cc-switcher", "pick"], { from: "node" });
 
     expect(capturedChoices[1].choices).toEqual(["anthropic", "openai"]);
     expect(capturedChoices[2].choices).toEqual(["anthropic/claude-sonnet-4.6"]);
@@ -259,9 +255,10 @@ describe("cli", () => {
       { from: "node" }
     );
 
-    const profile = JSON.parse(
-      fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")
-    );
+    const profile = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")) as {
+      apiKeyHelper: string;
+      model: string;
+    };
     expect(profile.apiKeyHelper).toBe("zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'");
     expect(profile.model).toBe("anthropic/claude-sonnet-4.6");
     expect(logs.join("\n")).toContain("Created profile: openrouter");
@@ -280,7 +277,7 @@ describe("cli", () => {
     const program = createProgram({ claudeDir, logger });
     await program.parseAsync(["node", "cc-switcher", "switch", "openrouter", "--json"], { from: "node" });
 
-    const payload = JSON.parse(logs[0]);
+    const payload = JSON.parse(logs[0]) as { profile: string; model: string };
     expect(payload.profile).toBe("openrouter");
     expect(payload.model).toBe("anthropic/claude-sonnet-4.6");
   });
@@ -304,7 +301,7 @@ describe("cli", () => {
       { from: "node" }
     );
 
-    const payload = JSON.parse(logs[0]);
+    const payload = JSON.parse(logs[0]) as { profile: string; model: string };
     expect(payload.profile).toBe("openrouter");
     expect(payload.model).toBe("openai/gpt-5-codex");
   });
@@ -319,9 +316,7 @@ describe("cli", () => {
       logger,
     });
 
-    await program.parseAsync(["node", "cc-switcher", "delete", "openrouter"], {
-      from: "node",
-    });
+    await program.parseAsync(["node", "cc-switcher", "delete", "openrouter"], { from: "node" });
 
     expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(false);
     expect(logs.join("\n")).toContain("Deleted profile: openrouter");
@@ -350,7 +345,7 @@ describe("cli", () => {
       { from: "node" }
     );
 
-    const payload = JSON.parse(logs[0]);
+    const payload = JSON.parse(logs[0]) as { profile: string; created: boolean };
     expect(payload.profile).toBe("openrouter");
     expect(payload.created).toBe(true);
   });
@@ -386,9 +381,11 @@ describe("cli", () => {
       { from: "node" }
     );
 
-    const profile = JSON.parse(
-      fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")
-    );
+    const profile = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")) as {
+      env: Record<string, string>;
+      model: string;
+      apiKeyHelper: string;
+    };
     expect(profile.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api/v2");
     expect(profile.model).toBe("openai/gpt-5-codex");
     expect(profile.apiKeyHelper).toBe("zsh -lc 'printf %s \"$ALT_OPENROUTER_KEY\"'");
@@ -414,7 +411,7 @@ describe("cli", () => {
       { from: "node" }
     );
 
-    const payload = JSON.parse(logs[0]);
+    const payload = JSON.parse(logs[0]) as { profile: string; updated: boolean; model: string };
     expect(payload.profile).toBe("openrouter");
     expect(payload.updated).toBe(true);
     expect(payload.model).toBe("openai/gpt-5-codex");
@@ -441,11 +438,9 @@ describe("cli", () => {
       logger,
     });
 
-    await program.parseAsync(["node", "cc-switcher", "delete", "openrouter", "--json"], {
-      from: "node",
-    });
+    await program.parseAsync(["node", "cc-switcher", "delete", "openrouter", "--json"], { from: "node" });
 
-    const payload = JSON.parse(logs[0]);
+    const payload = JSON.parse(logs[0]) as { profile: string; deleted: boolean };
     expect(payload.profile).toBe("openrouter");
     expect(payload.deleted).toBe(true);
   });

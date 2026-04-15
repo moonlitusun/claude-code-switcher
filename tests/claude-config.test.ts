@@ -1,28 +1,29 @@
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-const {
-  listProfiles,
-  detectActiveProfile,
-  switchProfile,
-  updateProfileModel,
+import { beforeEach, describe, expect, test } from "bun:test";
+
+import {
   createProfile,
   deleteProfile,
+  detectActiveProfile,
   editProfile,
-} = require("../src/claude-config");
+  listProfiles,
+  switchProfile,
+  updateProfileModel,
+} from "../src/claude-config";
 
-function writeJson(file, value) {
+function writeJson(file: string, value: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(value, null, 2));
 }
 
 describe("claude config", () => {
-  let tmpHome;
-  let claudeDir;
+  let claudeDir: string;
 
   beforeEach(() => {
-    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-switcher-"));
+    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-switcher-"));
     claudeDir = path.join(tmpHome, ".claude");
     fs.mkdirSync(claudeDir, { recursive: true });
   });
@@ -52,7 +53,7 @@ describe("claude config", () => {
       env: {
         ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
         ANTHROPIC_MODEL: "anthropic/claude-sonnet-4.6",
-        ANTHROPIC_DEFAULT_SONNET_MODEL: "anthropic/claude-sonnet-4.6"
+        ANTHROPIC_DEFAULT_SONNET_MODEL: "anthropic/claude-sonnet-4.6",
       },
       model: "anthropic/claude-sonnet-4.6",
     });
@@ -70,9 +71,13 @@ describe("claude config", () => {
 
     switchProfile("openrouter", claudeDir);
 
-    const active = JSON.parse(
-      fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")
-    );
+    const active = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) as {
+      enabledPlugins: Record<string, boolean>;
+      permissions: { mode: string };
+      apiKeyHelper: string;
+      model: string;
+      env: Record<string, string>;
+    };
 
     expect(active.enabledPlugins).toEqual({
       "provider@claude-provider-plugin": true,
@@ -100,12 +105,14 @@ describe("claude config", () => {
 
     updateProfileModel("openrouter", "openai/gpt-5-codex", claudeDir);
 
-    const profileData = JSON.parse(
-      fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")
-    );
-    const activeData = JSON.parse(
-      fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")
-    );
+    const profileData = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")) as {
+      model: string;
+      env: Record<string, string>;
+    };
+    const activeData = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) as {
+      model: string;
+      env: Record<string, string>;
+    };
 
     for (const data of [profileData, activeData]) {
       expect(data.model).toBe("openai/gpt-5-codex");
@@ -127,13 +134,13 @@ describe("claude config", () => {
       claudeDir
     );
 
-    const profileData = JSON.parse(
-      fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")
-    );
+    const profileData = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")) as {
+      apiKeyHelper: string;
+      model: string;
+      env: Record<string, string>;
+    };
 
-    expect(profileData.apiKeyHelper).toBe(
-      "zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'"
-    );
+    expect(profileData.apiKeyHelper).toBe("zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'");
     expect(profileData.model).toBe("anthropic/claude-sonnet-4.6");
     expect(profileData.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
     expect(profileData.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe("1");
@@ -172,9 +179,12 @@ describe("claude config", () => {
       claudeDir
     );
 
-    const profileData = JSON.parse(
-      fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")
-    );
+    const profileData = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")) as {
+      enabledPlugins: Record<string, boolean>;
+      env: Record<string, string>;
+      model: string;
+      apiKeyHelper: string;
+    };
 
     expect(profileData.enabledPlugins).toEqual({
       "provider@claude-provider-plugin": true,
@@ -182,8 +192,6 @@ describe("claude config", () => {
     expect(profileData.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api/v2");
     expect(profileData.env.CUSTOM_FLAG).toBe("keep-me");
     expect(profileData.model).toBe("openai/gpt-5-codex");
-    expect(profileData.apiKeyHelper).toBe(
-      "zsh -lc 'printf %s \"$ALT_OPENROUTER_KEY\"'"
-    );
+    expect(profileData.apiKeyHelper).toBe("zsh -lc 'printf %s \"$ALT_OPENROUTER_KEY\"'");
   });
 });

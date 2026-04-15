@@ -1,18 +1,31 @@
-const { Command } = require("commander");
-const pc = require("picocolors");
+import { Command } from "commander";
+import enquirer from "enquirer";
+import pc from "picocolors";
 
-const {
-  listProfiles,
-  detectActiveProfile,
-  switchProfile,
-  updateProfileModel,
-  readCurrentSettings,
-  readProfile,
+import {
   createProfile,
   deleteProfile,
+  detectActiveProfile,
   editProfile,
-} = require("./claude-config");
-const { detectProviderKind, filterModelsByVendor, fetchOpenRouterModels } = require("./providers/openrouter");
+  listProfiles,
+  readCurrentSettings,
+  readProfile,
+  switchProfile,
+  updateProfileModel,
+} from "./claude-config";
+import { detectProviderKind, fetchOpenRouterModels, filterModelsByVendor } from "./providers/openrouter";
+import type { Logger, ModelEntry, Settings } from "./types";
+
+type AskFn = (message: string, defaultValue?: string | null) => Promise<string | null>;
+type SelectFn = (message: string, choices: string[]) => Promise<string>;
+
+interface ProgramOptions {
+  claudeDir?: string;
+  logger?: Logger;
+  fetchModels?: () => Promise<ModelEntry[]>;
+  select?: SelectFn;
+  ask?: AskFn;
+}
 
 const HELP_EPILOG = [
   "",
@@ -40,12 +53,12 @@ const HELP_EPILOG = [
   "  Other profiles can still be switched and edited, but model discovery is not implemented yet.",
 ].join("\n");
 
-function createProgram(options) {
-  const claudeDir = options && options.claudeDir;
-  const logger = (options && options.logger) || console;
-  const fetchModels = (options && options.fetchModels) || fetchOpenRouterModels;
-  const select = (options && options.select) || selectFromList;
-  const ask = (options && options.ask) || promptInput;
+export function createProgram(options: ProgramOptions = {}): Command {
+  const claudeDir = options.claudeDir;
+  const logger = options.logger || console;
+  const fetchModels = options.fetchModels || fetchOpenRouterModels;
+  const select = options.select || selectFromList;
+  const ask = options.ask || promptInput;
   const program = new Command();
 
   program
@@ -54,20 +67,21 @@ function createProgram(options) {
     .showHelpAfterError("(run with --help for usage examples)");
 
   const defaultHelpInformation = program.helpInformation.bind(program);
-  program.helpInformation = function () {
-    return defaultHelpInformation() + "\n" + HELP_EPILOG + "\n";
+  program.helpInformation = function helpInformation(): string {
+    return `${defaultHelpInformation()}\n${HELP_EPILOG}\n`;
   };
 
   program
     .command("profiles")
     .description("List saved Claude profiles")
     .option("--json", "Output profiles as JSON")
-    .action((command) => {
+    .action(function (this: Command) {
+      const opts = this.opts<{ json?: boolean }>();
       const profiles = listProfiles(claudeDir);
       const active = detectActiveProfile(claudeDir);
 
       if (!profiles.length) {
-        if (command.json) {
+        if (opts.json) {
           printJson(logger, { active, profiles: [] });
         } else {
           logger.log("No Claude profiles found.");
@@ -75,13 +89,13 @@ function createProgram(options) {
         return;
       }
 
-      if (command.json) {
+      if (opts.json) {
         printJson(logger, { active, profiles });
         return;
       }
 
       profiles.forEach((name) => {
-        logger.log((name === active ? "* " : "  ") + name);
+        logger.log(`${name === active ? "* " : "  "}${name}`);
       });
     });
 
@@ -89,7 +103,8 @@ function createProgram(options) {
     .command("current")
     .description("Show the current Claude profile and model")
     .option("--json", "Output current profile details as JSON")
-    .action((command) => {
+    .action(function (this: Command) {
+      const opts = this.opts<{ json?: boolean }>();
       const active = detectActiveProfile(claudeDir) || "unknown";
       const settings = readCurrentSettings(claudeDir);
 
@@ -99,47 +114,45 @@ function createProgram(options) {
         return;
       }
 
-      const payload = {
-        activeProfile: active,
-        model: settings.model || settings.env && settings.env.ANTHROPIC_MODEL || null,
-        baseUrl: settings.env && settings.env.ANTHROPIC_BASE_URL || null,
-      };
+      const payload = currentPayload(active, settings);
 
-      if (command.json) {
+      if (opts.json) {
         printJson(logger, payload);
         return;
       }
 
-      logger.log("Active profile: " + payload.activeProfile);
-      logger.log("Model: " + (payload.model || "(unset)"));
-      logger.log("Base URL: " + (payload.baseUrl || "(native)"));
+      logger.log(`Active profile: ${payload.activeProfile}`);
+      logger.log(`Model: ${payload.model || "(unset)"}`);
+      logger.log(`Base URL: ${payload.baseUrl || "(native)"}`);
     });
 
   program
     .command("switch <profile>")
     .description("Switch to a saved Claude profile")
     .option("--json", "Output switch result as JSON")
-    .action((profile, command) => {
+    .action(function (this: Command, profile: string) {
+      const opts = this.opts<{ json?: boolean }>();
       const next = switchProfile(profile, claudeDir);
 
-      if (command.json) {
+      if (opts.json) {
         printJson(logger, {
           profile,
           switched: true,
-          model: next.model || next.env && next.env.ANTHROPIC_MODEL || null,
-          baseUrl: next.env && next.env.ANTHROPIC_BASE_URL || null,
+          model: readModel(next),
+          baseUrl: next.env?.ANTHROPIC_BASE_URL || null,
         });
         return;
       }
 
-      logger.log(pc.green("Switched to profile: " + profile));
+      logger.log(pc.green(`Switched to profile: ${profile}`));
     });
 
   program
     .command("pick")
     .description("Interactively choose a profile and model")
     .option("--vendor <vendor>", "Filter models by vendor during selection")
-    .action(async (command) => {
+    .action(async function (this: Command) {
+      const opts = this.opts<{ vendor?: string }>();
       const profiles = listProfiles(claudeDir);
 
       if (!profiles.length) {
@@ -150,45 +163,43 @@ function createProgram(options) {
 
       const chosenProfile = await select("Choose a profile", profiles);
       switchProfile(chosenProfile, claudeDir);
-      logger.log(pc.green("Switched to profile: " + chosenProfile));
+      logger.log(pc.green(`Switched to profile: ${chosenProfile}`));
 
       const settings = readProfile(chosenProfile, claudeDir);
-      const providerKind = detectProviderKind(settings && settings.env && settings.env.ANTHROPIC_BASE_URL);
+      const providerKind = detectProviderKind(settings?.env?.ANTHROPIC_BASE_URL);
 
       if (providerKind !== "openrouter") {
-        logger.log("Model discovery is not supported yet for profile: " + chosenProfile);
+        logger.log(`Model discovery is not supported yet for profile: ${chosenProfile}`);
         return;
       }
 
       const models = await fetchModels();
-      const vendor = command.vendor || (await select("Choose a vendor", listVendors(models)));
-      const chosenModel = await select(
-        "Choose a model",
-        filterModelsByVendor(models, vendor)
-      );
+      const vendor = opts.vendor || (await select("Choose a vendor", listVendors(models)));
+      const chosenModel = await select("Choose a model", filterModelsByVendor(models, vendor));
 
       updateProfileModel(chosenProfile, chosenModel, claudeDir);
-      logger.log(pc.green("Updated " + chosenProfile + " model to " + chosenModel));
+      logger.log(pc.green(`Updated ${chosenProfile} model to ${chosenModel}`));
     });
 
   program
     .command("models [profile] [vendor]")
     .description("List models for a provider-backed profile")
     .option("--json", "Output model results as JSON")
-    .action(async (profile, vendor, command) => {
+    .action(async function (this: Command, profile?: string, vendor?: string) {
+      const opts = this.opts<{ json?: boolean }>();
       const profileName = profile || detectActiveProfile(claudeDir);
       const settings = readProfileLikeSettings(profileName, claudeDir);
 
-      if (!settings) {
-        logger.error("Profile not found: " + profileName);
+      if (!settings || !profileName) {
+        logger.error(`Profile not found: ${profileName}`);
         process.exitCode = 1;
         return;
       }
 
-      const providerKind = detectProviderKind(settings.env && settings.env.ANTHROPIC_BASE_URL);
+      const providerKind = detectProviderKind(settings.env?.ANTHROPIC_BASE_URL);
 
       if (providerKind !== "openrouter") {
-        logger.error("Model discovery is not supported yet for profile: " + profileName);
+        logger.error(`Model discovery is not supported yet for profile: ${profileName}`);
         process.exitCode = 1;
         return;
       }
@@ -196,7 +207,7 @@ function createProgram(options) {
       const models = await fetchModels();
       const filtered = filterModelsByVendor(models, vendor);
 
-      if (command.json) {
+      if (opts.json) {
         printJson(logger, {
           profile: profileName,
           vendor: vendor || null,
@@ -213,8 +224,9 @@ function createProgram(options) {
     .description("Set the default model for a profile")
     .option("-p, --profile <profile>", "Profile name to update")
     .option("--json", "Output update result as JSON")
-    .action((model, command) => {
-      const profile = command.profile || detectActiveProfile(claudeDir);
+    .action(function (this: Command, model: string) {
+      const opts = this.opts<{ profile?: string; json?: boolean }>();
+      const profile = opts.profile || detectActiveProfile(claudeDir);
 
       if (!profile) {
         logger.error("No active profile found. Use --profile to target one.");
@@ -224,7 +236,7 @@ function createProgram(options) {
 
       updateProfileModel(profile, model, claudeDir);
 
-      if (command.json) {
+      if (opts.json) {
         printJson(logger, {
           profile,
           updated: true,
@@ -233,7 +245,7 @@ function createProgram(options) {
         return;
       }
 
-      logger.log(pc.green("Updated " + profile + " model to " + model));
+      logger.log(pc.green(`Updated ${profile} model to ${model}`));
     });
 
   program
@@ -244,35 +256,40 @@ function createProgram(options) {
     .option("--api-key-helper <command>", "Explicit apiKeyHelper command")
     .option("--model <model>", "Default model to save")
     .option("--json", "Output creation result as JSON")
-    .action(async (profile, command) => {
-      const baseUrl =
-        command.baseUrl || (await ask("Base URL", "https://openrouter.ai/api"));
-      const apiKeyEnv =
-        command.apiKeyEnv || (!command.apiKeyHelper ? await ask("API key env var", "OPENROUTER_API_KEY") : null);
-      const model = command.model || (await ask("Default model", "anthropic/claude-sonnet-4.6"));
+    .action(async function (this: Command, profile: string) {
+      const opts = this.opts<{
+        baseUrl?: string;
+        apiKeyEnv?: string;
+        apiKeyHelper?: string;
+        model?: string;
+        json?: boolean;
+      }>();
+      const baseUrl = opts.baseUrl || (await ask("Base URL", "https://openrouter.ai/api"));
+      const apiKeyEnv = opts.apiKeyEnv || (!opts.apiKeyHelper ? await ask("API key env var", "OPENROUTER_API_KEY") : null);
+      const model = opts.model || (await ask("Default model", "anthropic/claude-sonnet-4.6"));
 
       const created = createProfile(
         {
           profile,
           baseUrl,
           apiKeyEnv,
-          apiKeyHelper: command.apiKeyHelper,
+          apiKeyHelper: opts.apiKeyHelper,
           model,
         },
         claudeDir
       );
 
-      if (command.json) {
+      if (opts.json) {
         printJson(logger, {
           profile,
           created: true,
           model: created.model || null,
-          baseUrl: created.env && created.env.ANTHROPIC_BASE_URL || null,
+          baseUrl: created.env?.ANTHROPIC_BASE_URL || null,
         });
         return;
       }
 
-      logger.log(pc.green("Created profile: " + profile));
+      logger.log(pc.green(`Created profile: ${profile}`));
     });
 
   program
@@ -283,30 +300,32 @@ function createProgram(options) {
     .option("--api-key-helper <command>", "Explicit apiKeyHelper command")
     .option("--model <model>", "Default model to save")
     .option("--json", "Output edit result as JSON")
-    .action(async (profile, command) => {
+    .action(async function (this: Command, profile: string) {
+      const opts = this.opts<{
+        baseUrl?: string;
+        apiKeyEnv?: string;
+        apiKeyHelper?: string;
+        model?: string;
+        json?: boolean;
+      }>();
       const current = readProfile(profile, claudeDir);
 
       if (!current) {
-        logger.error("Profile not found: " + profile);
+        logger.error(`Profile not found: ${profile}`);
         process.exitCode = 1;
         return;
       }
 
-      const interactive =
-        !command.baseUrl &&
-        !command.apiKeyEnv &&
-        !command.apiKeyHelper &&
-        !command.model;
-
+      const interactive = !opts.baseUrl && !opts.apiKeyEnv && !opts.apiKeyHelper && !opts.model;
       const baseUrl =
-        command.baseUrl ||
-        (interactive ? await ask("Base URL", current.env && current.env.ANTHROPIC_BASE_URL) : current.env && current.env.ANTHROPIC_BASE_URL);
+        opts.baseUrl ||
+        (interactive ? await ask("Base URL", current.env?.ANTHROPIC_BASE_URL || null) : current.env?.ANTHROPIC_BASE_URL || null);
       const model =
-        command.model ||
-        (interactive ? await ask("Default model", current.model || current.env && current.env.ANTHROPIC_MODEL) : current.model || current.env && current.env.ANTHROPIC_MODEL);
+        opts.model ||
+        (interactive ? await ask("Default model", readModel(current)) : readModel(current));
       const apiKeyEnv =
-        command.apiKeyEnv ||
-        (!command.apiKeyHelper
+        opts.apiKeyEnv ||
+        (!opts.apiKeyHelper
           ? interactive
             ? await ask("API key env var", inferApiKeyEnv(current.apiKeyHelper))
             : inferApiKeyEnv(current.apiKeyHelper)
@@ -317,33 +336,34 @@ function createProgram(options) {
         {
           baseUrl,
           apiKeyEnv,
-          apiKeyHelper: command.apiKeyHelper,
+          apiKeyHelper: opts.apiKeyHelper,
           model,
         },
         claudeDir
       );
 
-      if (command.json) {
+      if (opts.json) {
         printJson(logger, {
           profile,
           updated: true,
           model: updated.model || null,
-          baseUrl: updated.env && updated.env.ANTHROPIC_BASE_URL || null,
+          baseUrl: updated.env?.ANTHROPIC_BASE_URL || null,
         });
         return;
       }
 
-      logger.log(pc.green("Updated profile: " + profile));
+      logger.log(pc.green(`Updated profile: ${profile}`));
     });
 
   program
     .command("delete <profile>")
     .description("Delete a Claude profile")
     .option("--json", "Output delete result as JSON")
-    .action((profile, command) => {
+    .action(function (this: Command, profile: string) {
+      const opts = this.opts<{ json?: boolean }>();
       deleteProfile(profile, claudeDir);
 
-      if (command.json) {
+      if (opts.json) {
         printJson(logger, {
           profile,
           deleted: true,
@@ -351,37 +371,42 @@ function createProgram(options) {
         return;
       }
 
-      logger.log(pc.green("Deleted profile: " + profile));
+      logger.log(pc.green(`Deleted profile: ${profile}`));
     });
 
   return program;
 }
 
-function readProfileLikeSettings(profile, claudeDir) {
+function readProfileLikeSettings(profile: string | null, claudeDir?: string): Settings | null {
   return profile ? readProfile(profile, claudeDir) : readCurrentSettings(claudeDir);
 }
 
-function promptInput(message, defaultValue) {
-  const { Input } = require("enquirer");
+async function promptInput(message: string, defaultValue?: string | null): Promise<string | null> {
+  const { Input } = enquirer as unknown as {
+    Input: new (options: { message: string; initial?: string }) => { run(): Promise<string> };
+  };
   const prompt = new Input({
     message,
-    initial: defaultValue,
+    initial: defaultValue || undefined,
   });
 
-  return prompt.run().then((value) => value || defaultValue);
+  const value = (await prompt.run()) as string;
+  return value || defaultValue || null;
 }
 
-async function selectFromList(message, choices) {
-  const { Select } = require("enquirer");
+async function selectFromList(message: string, choices: string[]): Promise<string> {
+  const { Select } = enquirer as unknown as {
+    Select: new (options: { message: string; choices: string[] }) => { run(): Promise<string> };
+  };
   const prompt = new Select({
     message,
     choices,
   });
 
-  return prompt.run();
+  return (await prompt.run()) as string;
 }
 
-function inferApiKeyEnv(apiKeyHelper) {
+function inferApiKeyEnv(apiKeyHelper?: string): string {
   if (!apiKeyHelper) {
     return "OPENROUTER_API_KEY";
   }
@@ -390,11 +415,11 @@ function inferApiKeyEnv(apiKeyHelper) {
   return match ? match[1] : "OPENROUTER_API_KEY";
 }
 
-function printJson(logger, payload) {
+function printJson(logger: Logger, payload: unknown): void {
   logger.log(JSON.stringify(payload, null, 2));
 }
 
-function listVendors(models) {
+function listVendors(models: ModelEntry[]): string[] {
   return Array.from(
     new Set(
       models
@@ -404,6 +429,14 @@ function listVendors(models) {
   ).sort();
 }
 
-module.exports = {
-  createProgram,
-};
+function readModel(settings: Settings): string | null {
+  return settings.model || settings.env?.ANTHROPIC_MODEL || null;
+}
+
+function currentPayload(activeProfile: string, settings: Settings): { activeProfile: string; model: string | null; baseUrl: string | null } {
+  return {
+    activeProfile,
+    model: readModel(settings),
+    baseUrl: settings.env?.ANTHROPIC_BASE_URL || null,
+  };
+}

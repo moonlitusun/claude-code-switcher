@@ -1,4 +1,6 @@
-const { filterModelsByVendor, detectProviderKind } = require("../src/providers/openrouter");
+import { describe, expect, test } from "bun:test";
+
+import { detectProviderKind, filterModelsByVendor } from "../src/providers/openrouter";
 
 describe("openrouter provider helpers", () => {
   test("filters models by vendor prefix", () => {

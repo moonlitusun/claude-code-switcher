@@ -1,6 +1,6 @@
 # cc-switcher
 
-`cc-switcher` is a Node.js CLI for managing Claude Code provider profiles and default models.
+`cc-switcher` is a Bun-first TypeScript CLI for managing Claude Code provider profiles and default models.
 
 It keeps the profile-based workflow that tools like `claude-code-switch` made convenient, and adds model discovery plus model switching for OpenRouter-backed profiles.
 
@@ -30,18 +30,21 @@ This tool is for people who want to:
 
 ## Install
 
+### Requirements
+
+- Bun `>= 1.2.16`
+
 ### Local development
 
 ```bash
-npm install
-npm link
+bun install
+bun link
 ```
 
 After linking, the CLI is available as:
 
 ```bash
 cc-switcher
-// Or
 ccs
 ```
 
@@ -191,7 +194,7 @@ Other profiles can still be switched and updated manually with `ccs use <model>`
 
 This project was inspired by [foreveryh/claude-code-switch](https://github.com/foreveryh/claude-code-switch), which showed a clean, profile-oriented workflow for Claude Code switching.
 
-`cc-switcher` does not copy that project’s shell implementation. Instead, it reimplements the idea as a Node.js CLI and extends it with model discovery and model switching, especially for OpenRouter-backed setups.
+`cc-switcher` does not copy that project’s shell implementation. Instead, it reimplements the idea as a Bun + TypeScript CLI and extends it with model discovery and model switching, especially for OpenRouter-backed setups.
 
 If you primarily want a lightweight shell-based switcher, you should also take a look at the original project.
 
@@ -200,16 +203,46 @@ If you primarily want a lightweight shell-based switcher, you should also take a
 Run tests:
 
 ```bash
-npm test
+bun test
 ```
 
-Show CLI help:
+Run type-checking:
 
 ```bash
-node bin/cc-switcher.js --help
+bun run typecheck
+```
+
+Build the publishable CLI:
+
+```bash
+bun run build
+```
+
+The build output is written to:
+
+```bash
+dist/bin/cc-switcher.js
+```
+
+Show CLI help during development:
+
+```bash
+bun run src/cli.ts --help
 ```
 
 The help output includes examples and notes for the most common profile and model workflows.
+
+## Publishing
+
+Before publishing, the package runs:
+
+```bash
+bun run typecheck
+bun test
+bun run build
+```
+
+This happens automatically through `prepublishOnly`, so the published package uses the built file from `dist/`.
 
 ## JSON output
 
@@ -230,4 +263,4 @@ This makes it easier to script around the CLI from shell pipelines or automation
 
 - add provider adapters for more hosted backends
 - improve interactive prompts and multi-step flows
-- add json output to mutation commands where useful
+- improve release automation

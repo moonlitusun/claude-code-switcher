@@ -1,9 +1,10 @@
 {
-  "name": "cc-switcher",
-  "version": "0.1.0",
+  "name": "@sunday-sky/cc-switcher",
+  "version": "1.0.0",
   "description": "CLI for switching Claude Code providers and models",
   "license": "MIT",
   "homepage": "https://github.com/rocsun/cc-switcher",
+  "packageManager": "bun@1.2.16",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rocsun/cc-switcher.git"
@@ -20,16 +21,23 @@
     "provider-switcher"
   ],
   "bin": {
-    "cc-switcher": "./bin/cc-switcher.js",
-    "ccs": "./bin/cc-switcher.js"
+    "cc-switcher": "./dist/bin/cc-switcher.js",
+    "ccs": "./dist/bin/cc-switcher.js"
   },
-  "type": "commonjs",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
-    "test": "jest --runInBand",
-    "test:watch": "jest --watch"
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "typecheck": "bunx tsc --noEmit",
+    "build": "rm -rf dist && bun build ./bin/cc-switcher.ts --outfile ./dist/bin/cc-switcher.js --target=node --format=esm && chmod +x ./dist/bin/cc-switcher.js",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build"
   },
   "engines": {
-    "node": ">=14"
+    "bun": ">=1.2.16"
   },
   "dependencies": {
     "commander": "^9.5.0",
@@ -37,6 +45,8 @@
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "jest": "^29.7.0"
+    "@types/node": "^22.15.3",
+    "bun-types": "^1.2.16",
+    "typescript": "^5.8.3"
   }
 }
