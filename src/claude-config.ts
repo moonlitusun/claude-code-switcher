@@ -200,8 +200,8 @@ function buildProfileSettings(base: Settings, options: Partial<ProfileOptions>):
 
   if (options.apiKeyHelper) {
     next.apiKeyHelper = options.apiKeyHelper;
-  } else if (options.apiKeyEnv) {
-    next.apiKeyHelper = defaultApiKeyHelper(options.apiKeyEnv);
+  } else if (options.apiKey !== undefined && options.apiKey !== null) {
+    next.apiKeyHelper = literalApiKeyHelper(options.apiKey);
   }
 
   if (options.model) {
@@ -213,6 +213,15 @@ function buildProfileSettings(base: Settings, options: Partial<ProfileOptions>):
   return next;
 }
 
-export function defaultApiKeyHelper(apiKeyEnv: string): string {
-  return `node -e "process.stdout.write(process.env.${apiKeyEnv} || '')"`;
+export function literalApiKeyHelper(apiKey: string): string {
+  return `node -e "process.stdout.write('${escapeJsSingleQuotedString(apiKey)}')"`;
+}
+
+function escapeJsSingleQuotedString(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n")
+    .replace(/\t/g, "\\t");
 }

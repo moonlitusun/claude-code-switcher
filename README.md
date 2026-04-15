@@ -122,7 +122,7 @@ Model discovery works when `ANTHROPIC_BASE_URL` contains `openrouter.ai`.
 ```bash
 ccs create openrouter \
   --base-url https://openrouter.ai/api \
-  --api-key-env OPENROUTER_API_KEY \
+  --api-key sk-or-v1-your-key \
   --model anthropic/claude-sonnet-4.6
 ```
 
@@ -139,7 +139,7 @@ ccs edit openrouter --model openai/gpt-5-codex
 ccs edit openrouter --model openai/gpt-5-codex --json
 ```
 
-If you run `ccs edit openrouter` without flags, the CLI prompts for the current base URL, API key env var, and default model.
+If you run `ccs edit openrouter` without flags, the CLI prompts for the current base URL, API key, and default model.
 
 ### Delete a profile
 
@@ -219,7 +219,7 @@ Create a Claude profile.
 ccs create openrouter
 ccs create openrouter \
   --base-url https://openrouter.ai/api \
-  --api-key-env OPENROUTER_API_KEY \
+  --api-key sk-or-v1-your-key \
   --model anthropic/claude-sonnet-4.6 \
   --json
 ```

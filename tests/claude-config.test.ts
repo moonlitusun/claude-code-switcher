@@ -9,7 +9,7 @@ import {
   deleteProfile,
   detectActiveProfile,
   editProfile,
-  defaultApiKeyHelper,
+  literalApiKeyHelper,
   listProfiles,
   switchProfile,
   updateProfileModel,
@@ -124,12 +124,12 @@ describe("claude config", () => {
     }
   });
 
-  test("creates a profile with env-based api key helper and model defaults", () => {
+  test("creates a profile with a literal api key helper and model defaults", () => {
     createProfile(
       {
         profile: "openrouter",
         baseUrl: "https://openrouter.ai/api",
-        apiKeyEnv: "OPENROUTER_API_KEY",
+        apiKey: "sk-test-create",
         model: "anthropic/claude-sonnet-4.6",
       },
       claudeDir
@@ -141,7 +141,7 @@ describe("claude config", () => {
       env: Record<string, string>;
     };
 
-    expect(profileData.apiKeyHelper).toBe(defaultApiKeyHelper("OPENROUTER_API_KEY"));
+    expect(profileData.apiKeyHelper).toBe(literalApiKeyHelper("sk-test-create"));
     expect(profileData.model).toBe("anthropic/claude-sonnet-4.6");
     expect(profileData.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
     expect(profileData.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe("1");
@@ -174,7 +174,7 @@ describe("claude config", () => {
       "openrouter",
       {
         baseUrl: "https://openrouter.ai/api/v2",
-        apiKeyEnv: "ALT_OPENROUTER_KEY",
+        apiKey: "sk-test-edit",
         model: "openai/gpt-5-codex",
       },
       claudeDir
@@ -193,12 +193,12 @@ describe("claude config", () => {
     expect(profileData.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api/v2");
     expect(profileData.env.CUSTOM_FLAG).toBe("keep-me");
     expect(profileData.model).toBe("openai/gpt-5-codex");
-    expect(profileData.apiKeyHelper).toBe(defaultApiKeyHelper("ALT_OPENROUTER_KEY"));
+    expect(profileData.apiKeyHelper).toBe(literalApiKeyHelper("sk-test-edit"));
   });
 
-  test("builds a default api key helper with node", () => {
-    expect(defaultApiKeyHelper("OPENROUTER_API_KEY")).toBe(
-      'node -e "process.stdout.write(process.env.OPENROUTER_API_KEY || \'\')"'
+  test("builds a literal api key helper", () => {
+    expect(literalApiKeyHelper("sk-test-123")).toBe(
+      'node -e "process.stdout.write(\'sk-test-123\')"'
     );
   });
 });

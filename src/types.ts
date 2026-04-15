@@ -9,7 +9,7 @@ export interface Settings {
 export interface ProfileOptions {
   profile: string;
   baseUrl?: string | null;
-  apiKeyEnv?: string | null;
+  apiKey?: string | null;
   apiKeyHelper?: string | null;
   model?: string | null;
   disableNonessentialTraffic?: boolean;

@@ -52,8 +52,8 @@ const HELP_EPILOG = [
   "  ccs use",
   "  ccs use openai/gpt-5-codex --profile openrouter",
   "  ccs use openai/gpt-5-codex --profile openrouter --json",
-  "  ccs create openrouter --base-url https://openrouter.ai/api --api-key-env OPENROUTER_API_KEY",
-  "  ccs create openrouter --base-url https://openrouter.ai/api --api-key-env OPENROUTER_API_KEY --json",
+  "  ccs create openrouter --base-url https://openrouter.ai/api --api-key sk-or-v1-your-key",
+  "  ccs create openrouter --base-url https://openrouter.ai/api --api-key sk-or-v1-your-key --json",
   "  ccs edit openrouter --model anthropic/claude-sonnet-4.6",
   "  ccs edit openrouter --model anthropic/claude-sonnet-4.6 --json",
   "  ccs delete openrouter --json",
@@ -289,28 +289,25 @@ export function createProgram(options: ProgramOptions = {}): Command {
     .command("create <profile>")
     .description("Create a Claude profile")
     .option("--base-url <url>", "Provider base URL")
-    .option("--api-key-env <name>", "Environment variable that stores the API key")
-    .option("--api-key-helper <command>", "Explicit apiKeyHelper command")
+    .option("--api-key <key>", "API key to store directly in the profile helper")
     .option("--model <model>", "Default model to save")
     .option("--json", "Output creation result as JSON")
     .action(async function (this: Command, profile: string) {
       const opts = this.opts<{
         baseUrl?: string;
-        apiKeyEnv?: string;
-        apiKeyHelper?: string;
+        apiKey?: string;
         model?: string;
         json?: boolean;
       }>();
       const baseUrl = opts.baseUrl || (await ask("Base URL", "https://openrouter.ai/api"));
-      const apiKeyEnv = opts.apiKeyEnv || (!opts.apiKeyHelper ? await ask("API key env var", "OPENROUTER_API_KEY") : null);
+      const apiKey = opts.apiKey !== undefined ? opts.apiKey : await ask("API key", null);
       const model = opts.model || (await ask("Default model", "anthropic/claude-sonnet-4.6"));
 
       const created = createProfile(
         {
           profile,
           baseUrl,
-          apiKeyEnv,
-          apiKeyHelper: opts.apiKeyHelper,
+          apiKey,
           model,
         },
         claudeDir
@@ -333,15 +330,13 @@ export function createProgram(options: ProgramOptions = {}): Command {
     .command("edit <profile>")
     .description("Edit a Claude profile")
     .option("--base-url <url>", "Provider base URL")
-    .option("--api-key-env <name>", "Environment variable that stores the API key")
-    .option("--api-key-helper <command>", "Explicit apiKeyHelper command")
+    .option("--api-key <key>", "API key to store directly in the profile helper")
     .option("--model <model>", "Default model to save")
     .option("--json", "Output edit result as JSON")
     .action(async function (this: Command, profile: string) {
       const opts = this.opts<{
         baseUrl?: string;
-        apiKeyEnv?: string;
-        apiKeyHelper?: string;
+        apiKey?: string;
         model?: string;
         json?: boolean;
       }>();
@@ -353,27 +348,25 @@ export function createProgram(options: ProgramOptions = {}): Command {
         return;
       }
 
-      const interactive = !opts.baseUrl && !opts.apiKeyEnv && !opts.apiKeyHelper && !opts.model;
+      const interactive = !opts.baseUrl && opts.apiKey === undefined && !opts.model;
       const baseUrl =
         opts.baseUrl ||
         (interactive ? await ask("Base URL", current.env?.ANTHROPIC_BASE_URL || null) : current.env?.ANTHROPIC_BASE_URL || null);
       const model =
         opts.model ||
         (interactive ? await ask("Default model", readModel(current)) : readModel(current));
-      const apiKeyEnv =
-        opts.apiKeyEnv ||
-        (!opts.apiKeyHelper
-          ? interactive
-            ? await ask("API key env var", inferApiKeyEnv(current.apiKeyHelper))
-            : inferApiKeyEnv(current.apiKeyHelper)
-          : null);
+      const apiKey =
+        opts.apiKey !== undefined
+          ? opts.apiKey
+          : interactive
+            ? await ask("API key", inferLiteralApiKey(current.apiKeyHelper))
+            : undefined;
 
       const updated = editProfile(
         profile,
         {
           baseUrl,
-          apiKeyEnv,
-          apiKeyHelper: opts.apiKeyHelper,
+          apiKey,
           model,
         },
         claudeDir
@@ -500,34 +493,6 @@ async function selectFromListSimple(message: string, choices: string[]): Promise
   throw new Error(`Invalid selection: ${answer}`);
 }
 
-function inferApiKeyEnv(apiKeyHelper?: string): string {
-  if (!apiKeyHelper) {
-    return "OPENROUTER_API_KEY";
-  }
-
-  const bashStyle = apiKeyHelper.match(/\$([A-Z0-9_]+)/);
-  if (bashStyle) {
-    return bashStyle[1];
-  }
-
-  const nodeStyle = apiKeyHelper.match(/process\.env\.([A-Z0-9_]+)/);
-  if (nodeStyle) {
-    return nodeStyle[1];
-  }
-
-  const powershellStyle = apiKeyHelper.match(/\$env:([A-Z0-9_]+)/i);
-  if (powershellStyle) {
-    return powershellStyle[1];
-  }
-
-  const cmdStyle = apiKeyHelper.match(/%([A-Z0-9_]+)%/);
-  if (cmdStyle) {
-    return cmdStyle[1];
-  }
-
-  return "OPENROUTER_API_KEY";
-}
-
 function printJson(logger: Logger, payload: unknown): void {
   logger.log(JSON.stringify(payload, null, 2));
 }
@@ -543,6 +508,24 @@ async function chooseProfile(search: SearchFn, claudeDir?: string): Promise<stri
 
 function readModel(settings: Settings): string | null {
   return settings.model || settings.env?.ANTHROPIC_MODEL || null;
+}
+
+function inferLiteralApiKey(apiKeyHelper?: string): string | null {
+  if (!apiKeyHelper) {
+    return null;
+  }
+
+  const match = apiKeyHelper.match(/^node -e "process\.stdout\.write\('((?:\\'|\\\\|\\r|\\n|\\t|[^'])*)'\)"$/);
+  if (!match) {
+    return null;
+  }
+
+  return match[1]
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\\\/g, "\\")
+    .replace(/\\'/g, "'");
 }
 
 async function chooseModelForProfile(
