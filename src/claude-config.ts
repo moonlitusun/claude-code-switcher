@@ -201,7 +201,7 @@ function buildProfileSettings(base: Settings, options: Partial<ProfileOptions>):
   if (options.apiKeyHelper) {
     next.apiKeyHelper = options.apiKeyHelper;
   } else if (options.apiKeyEnv) {
-    next.apiKeyHelper = `zsh -lc 'printf %s "$${options.apiKeyEnv}"'`;
+    next.apiKeyHelper = defaultApiKeyHelper(options.apiKeyEnv);
   }
 
   if (options.model) {
@@ -211,4 +211,8 @@ function buildProfileSettings(base: Settings, options: Partial<ProfileOptions>):
   }
 
   return next;
+}
+
+export function defaultApiKeyHelper(apiKeyEnv: string): string {
+  return `node -e "process.stdout.write(process.env.${apiKeyEnv} || '')"`;
 }

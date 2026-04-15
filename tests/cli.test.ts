@@ -5,6 +5,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { createProgram, shouldUseRichPrompts } from "../src/cli";
+import { defaultApiKeyHelper } from "../src/claude-config";
 
 function writeJson(file: string, value: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -304,7 +305,7 @@ describe("cli", () => {
       apiKeyHelper: string;
       model: string;
     };
-    expect(profile.apiKeyHelper).toBe("zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'");
+    expect(profile.apiKeyHelper).toBe(defaultApiKeyHelper("OPENROUTER_API_KEY"));
     expect(profile.model).toBe("anthropic/claude-sonnet-4.6");
     expect(logs.join("\n")).toContain("Created profile: openrouter");
   });
@@ -473,7 +474,7 @@ describe("cli", () => {
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
       },
       model: "anthropic/claude-sonnet-4.6",
-      apiKeyHelper: "zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'",
+      apiKeyHelper: defaultApiKeyHelper("OPENROUTER_API_KEY"),
     });
 
     const program = createProgram({
@@ -504,7 +505,7 @@ describe("cli", () => {
     };
     expect(profile.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api/v2");
     expect(profile.model).toBe("openai/gpt-5-codex");
-    expect(profile.apiKeyHelper).toBe("zsh -lc 'printf %s \"$ALT_OPENROUTER_KEY\"'");
+    expect(profile.apiKeyHelper).toBe(defaultApiKeyHelper("ALT_OPENROUTER_KEY"));
     expect(logs.join("\n")).toContain("Updated profile: openrouter");
   });
 
@@ -514,7 +515,7 @@ describe("cli", () => {
         ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
       },
       model: "anthropic/claude-sonnet-4.6",
-      apiKeyHelper: "zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'",
+      apiKeyHelper: defaultApiKeyHelper("OPENROUTER_API_KEY"),
     });
 
     const program = createProgram({

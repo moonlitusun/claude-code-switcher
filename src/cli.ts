@@ -505,8 +505,27 @@ function inferApiKeyEnv(apiKeyHelper?: string): string {
     return "OPENROUTER_API_KEY";
   }
 
-  const match = apiKeyHelper.match(/\$([A-Z0-9_]+)/);
-  return match ? match[1] : "OPENROUTER_API_KEY";
+  const bashStyle = apiKeyHelper.match(/\$([A-Z0-9_]+)/);
+  if (bashStyle) {
+    return bashStyle[1];
+  }
+
+  const nodeStyle = apiKeyHelper.match(/process\.env\.([A-Z0-9_]+)/);
+  if (nodeStyle) {
+    return nodeStyle[1];
+  }
+
+  const powershellStyle = apiKeyHelper.match(/\$env:([A-Z0-9_]+)/i);
+  if (powershellStyle) {
+    return powershellStyle[1];
+  }
+
+  const cmdStyle = apiKeyHelper.match(/%([A-Z0-9_]+)%/);
+  if (cmdStyle) {
+    return cmdStyle[1];
+  }
+
+  return "OPENROUTER_API_KEY";
 }
 
 function printJson(logger: Logger, payload: unknown): void {

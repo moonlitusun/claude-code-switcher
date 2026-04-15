@@ -9,6 +9,7 @@ import {
   deleteProfile,
   detectActiveProfile,
   editProfile,
+  defaultApiKeyHelper,
   listProfiles,
   switchProfile,
   updateProfileModel,
@@ -140,7 +141,7 @@ describe("claude config", () => {
       env: Record<string, string>;
     };
 
-    expect(profileData.apiKeyHelper).toBe("zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'");
+    expect(profileData.apiKeyHelper).toBe(defaultApiKeyHelper("OPENROUTER_API_KEY"));
     expect(profileData.model).toBe("anthropic/claude-sonnet-4.6");
     expect(profileData.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
     expect(profileData.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe("1");
@@ -192,6 +193,12 @@ describe("claude config", () => {
     expect(profileData.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api/v2");
     expect(profileData.env.CUSTOM_FLAG).toBe("keep-me");
     expect(profileData.model).toBe("openai/gpt-5-codex");
-    expect(profileData.apiKeyHelper).toBe("zsh -lc 'printf %s \"$ALT_OPENROUTER_KEY\"'");
+    expect(profileData.apiKeyHelper).toBe(defaultApiKeyHelper("ALT_OPENROUTER_KEY"));
+  });
+
+  test("builds a default api key helper with node", () => {
+    expect(defaultApiKeyHelper("OPENROUTER_API_KEY")).toBe(
+      'node -e "process.stdout.write(process.env.OPENROUTER_API_KEY || \'\')"'
+    );
   });
 });
