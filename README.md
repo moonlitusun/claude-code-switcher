@@ -80,6 +80,7 @@ ccs switch openrouter --json
 ```
 
 If you omit the profile, `ccs switch` opens a searchable selector.
+In non-standard terminals or wrapped shells, the selector automatically falls back to a simpler prompt to avoid noisy redraw output.
 
 ### Interactively pick a profile and model
 
@@ -122,6 +123,7 @@ ccs use anthropic/claude-sonnet-4.6 --json
 ```
 
 If you omit the model, `ccs use` opens a searchable flow for vendor and model selection.
+In non-standard terminals or wrapped shells, the interactive flow automatically falls back to a simpler prompt to avoid noisy redraw output.
 
 ### Update a specific profile model
 

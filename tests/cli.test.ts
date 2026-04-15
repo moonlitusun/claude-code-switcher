@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { createProgram } from "../src/cli";
+import { createProgram, shouldUseRichPrompts } from "../src/cli";
 
 function writeJson(file: string, value: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -515,5 +515,31 @@ describe("cli", () => {
     const payload = JSON.parse(logs[0]) as { profile: string; deleted: boolean };
     expect(payload.profile).toBe("openrouter");
     expect(payload.deleted).toBe(true);
+  });
+
+  test("rich prompts are disabled for dumb or non-tty terminals", () => {
+    expect(
+      shouldUseRichPrompts({
+        term: "dumb",
+        stdinTTY: true,
+        stdoutTTY: true,
+      })
+    ).toBe(false);
+
+    expect(
+      shouldUseRichPrompts({
+        term: "xterm-256color",
+        stdinTTY: false,
+        stdoutTTY: true,
+      })
+    ).toBe(false);
+
+    expect(
+      shouldUseRichPrompts({
+        term: "xterm-256color",
+        stdinTTY: true,
+        stdoutTTY: true,
+      })
+    ).toBe(true);
   });
 });

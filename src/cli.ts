@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import enquirer from "enquirer";
+import readline from "node:readline";
 import pc from "picocolors";
 
 import {
@@ -25,6 +26,12 @@ interface ProgramOptions {
   fetchModels?: () => Promise<ModelEntry[]>;
   select?: SelectFn;
   ask?: AskFn;
+}
+
+interface PromptCapabilities {
+  term?: string | null;
+  stdinTTY?: boolean;
+  stdoutTTY?: boolean;
 }
 
 const HELP_EPILOG = [
@@ -399,6 +406,10 @@ function readProfileLikeSettings(profile: string | null, claudeDir?: string): Se
 }
 
 async function promptInput(message: string, defaultValue?: string | null): Promise<string | null> {
+  if (!shouldUseRichPrompts()) {
+    return promptInputSimple(message, defaultValue);
+  }
+
   const { Input } = enquirer as unknown as {
     Input: new (options: { message: string; initial?: string }) => { run(): Promise<string> };
   };
@@ -412,6 +423,10 @@ async function promptInput(message: string, defaultValue?: string | null): Promi
 }
 
 async function selectFromList(message: string, choices: string[]): Promise<string> {
+  if (!shouldUseRichPrompts()) {
+    return selectFromListSimple(message, choices);
+  }
+
   const { AutoComplete } = enquirer as unknown as {
     AutoComplete: new (options: { message: string; choices: string[] }) => { run(): Promise<string> };
   };
@@ -421,6 +436,39 @@ async function selectFromList(message: string, choices: string[]): Promise<strin
   });
 
   return (await prompt.run()) as string;
+}
+
+async function promptInputSimple(message: string, defaultValue?: string | null): Promise<string | null> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  const suffix = defaultValue ? ` [${defaultValue}]` : "";
+
+  const answer = await new Promise<string>((resolve) => {
+    rl.question(`${message}${suffix}: `, resolve);
+  });
+
+  rl.close();
+  return answer || defaultValue || null;
+}
+
+async function selectFromListSimple(message: string, choices: string[]): Promise<string> {
+  const menu = `${message}\n${choices.map((choice, index) => `${index + 1}. ${choice}`).join("\n")}`;
+  const answer = await promptInputSimple(menu, "1");
+  const numeric = Number(answer);
+
+  if (!Number.isNaN(numeric) && numeric >= 1 && numeric <= choices.length) {
+    return choices[numeric - 1]!;
+  }
+
+  const exact = choices.find((choice) => choice === answer);
+  if (exact) {
+    return exact;
+  }
+
+  throw new Error(`Invalid selection: ${answer}`);
 }
 
 function inferApiKeyEnv(apiKeyHelper?: string): string {
@@ -485,4 +533,20 @@ function currentPayload(activeProfile: string, settings: Settings): { activeProf
     model: readModel(settings),
     baseUrl: settings.env?.ANTHROPIC_BASE_URL || null,
   };
+}
+
+export function shouldUseRichPrompts(capabilities: PromptCapabilities = {}): boolean {
+  const term = capabilities.term ?? process.env.TERM ?? null;
+  const stdinTTY = capabilities.stdinTTY ?? Boolean(process.stdin.isTTY);
+  const stdoutTTY = capabilities.stdoutTTY ?? Boolean(process.stdout.isTTY);
+
+  if (!stdinTTY || !stdoutTTY) {
+    return false;
+  }
+
+  if (!term || term === "dumb") {
+    return false;
+  }
+
+  return true;
 }
