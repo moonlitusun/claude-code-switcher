@@ -1,0 +1,24 @@
+{
+  "name": "cc-switcher",
+  "version": "0.1.0",
+  "description": "CLI for switching Claude Code providers and models",
+  "bin": {
+    "cc-switcher": "./bin/cc-switcher.js",
+    "ccs": "./bin/cc-switcher.js"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "dependencies": {
+    "commander": "^9.5.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
