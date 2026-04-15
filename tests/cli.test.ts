@@ -125,7 +125,7 @@ describe("cli", () => {
     expect(payload.models).toEqual(["anthropic/claude-sonnet-4.6"]);
   });
 
-  test("pick switches profile and updates model from interactive selections", async () => {
+  test("pick searches the profile and model directly", async () => {
     writeJson(path.join(claudeDir, "settings.openrouter.json"), {
       env: {
         ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
@@ -145,7 +145,8 @@ describe("cli", () => {
       model: "gateway-model",
     });
 
-    const answers = ["openrouter", "anthropic", "anthropic/claude-sonnet-4.6"];
+    const capturedChoices: Array<{ message: string; choices: string[] }> = [];
+    const answers = ["openrouter", "anthropic/claude-sonnet-4.6"];
     const program = createProgram({
       claudeDir,
       logger,
@@ -153,7 +154,10 @@ describe("cli", () => {
         { id: "anthropic/claude-sonnet-4.6" },
         { id: "openai/gpt-5-codex" },
       ],
-      select: async () => answers.shift() || "",
+      search: async (message, choices) => {
+        capturedChoices.push({ message, choices });
+        return answers.shift() || null;
+      },
     });
 
     await program.parseAsync(["node", "cc-switcher", "pick"], { from: "node" });
@@ -162,13 +166,16 @@ describe("cli", () => {
       env: Record<string, string>;
       model: string;
     };
+    expect(capturedChoices[0].message).toBe("Choose a profile");
+    expect(capturedChoices[0].choices).toEqual(["local-gateway", "openrouter"]);
+    expect(capturedChoices[1].choices).toEqual(["anthropic/claude-sonnet-4.6", "openai/gpt-5-codex"]);
     expect(active.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
     expect(active.model).toBe("anthropic/claude-sonnet-4.6");
     expect(logs.join("\n")).toContain("Switched to profile: openrouter");
     expect(logs.join("\n")).toContain("Updated openrouter model to anthropic/claude-sonnet-4.6");
   });
 
-  test("pick respects vendor filtering when selecting models", async () => {
+  test("pick searches filtered models when vendor is provided", async () => {
     writeJson(path.join(claudeDir, "settings.openrouter.json"), {
       env: {
         ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
@@ -189,9 +196,9 @@ describe("cli", () => {
         { id: "anthropic/claude-sonnet-4.6" },
         { id: "openai/gpt-5-codex" },
       ],
-      select: async (message, choices) => {
+      search: async (message, choices) => {
         capturedChoices.push({ message, choices });
-        return answers.shift() || "";
+        return answers.shift() || null;
       },
     });
 
@@ -200,12 +207,50 @@ describe("cli", () => {
     expect(capturedChoices[1].choices).toEqual(["openai/gpt-5-codex"]);
   });
 
-  test("pick prompts for vendor before model selection", async () => {
+  test("switch searches profiles directly", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+      model: "anthropic/claude-sonnet-4.6",
+    });
+    writeJson(path.join(claudeDir, "settings.local-gateway.json"), {
+      env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8317" },
+      model: "gateway-model",
+    });
+    writeJson(path.join(claudeDir, "settings.json"), {
+      env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8317" },
+      model: "gateway-model",
+    });
+
+    const capturedChoices: Array<{ message: string; choices: string[] }> = [];
+    const program = createProgram({
+      claudeDir,
+      logger,
+      search: async (message, choices) => {
+        capturedChoices.push({ message, choices });
+        return "openrouter";
+      },
+    });
+
+    await program.parseAsync(["node", "cc-switcher", "switch"], { from: "node" });
+
+    const active = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) as {
+      env: Record<string, string>;
+    };
+    expect(capturedChoices[0].message).toBe("Choose a profile");
+    expect(capturedChoices[0].choices).toEqual(["local-gateway", "openrouter"]);
+    expect(active.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
+  });
+
+  test("pick searches profiles before model selection", async () => {
     writeJson(path.join(claudeDir, "settings.openrouter.json"), {
       env: {
         ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
       },
       model: "old-model",
+    });
+    writeJson(path.join(claudeDir, "settings.local-gateway.json"), {
+      env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8317" },
+      model: "gateway-model",
     });
     writeJson(path.join(claudeDir, "settings.json"), {
       env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
@@ -213,7 +258,7 @@ describe("cli", () => {
     });
 
     const capturedChoices: Array<{ message: string; choices: string[] }> = [];
-    const answers = ["openrouter", "anthropic", "anthropic/claude-sonnet-4.6"];
+    const answers = ["openrouter", "anthropic/claude-sonnet-4.6"];
     const program = createProgram({
       claudeDir,
       logger,
@@ -221,16 +266,16 @@ describe("cli", () => {
         { id: "anthropic/claude-sonnet-4.6" },
         { id: "openai/gpt-5-codex" },
       ],
-      select: async (message, choices) => {
+      search: async (message, choices) => {
         capturedChoices.push({ message, choices });
-        return answers.shift() || "";
+        return answers.shift() || null;
       },
     });
 
     await program.parseAsync(["node", "cc-switcher", "pick"], { from: "node" });
 
-    expect(capturedChoices[1].choices).toEqual(["anthropic", "openai"]);
-    expect(capturedChoices[2].choices).toEqual(["anthropic/claude-sonnet-4.6"]);
+    expect(capturedChoices[0].choices).toEqual(["local-gateway", "openrouter"]);
+    expect(capturedChoices[1].choices).toEqual(["anthropic/claude-sonnet-4.6", "openai/gpt-5-codex"]);
   });
 
   test("create writes a new profile from command options", async () => {
@@ -300,7 +345,7 @@ describe("cli", () => {
     const program = createProgram({
       claudeDir,
       logger,
-      select: async (message, choices) => {
+      search: async (message, choices) => {
         capturedChoices.push({ message, choices });
         return "openrouter";
       },
@@ -340,7 +385,7 @@ describe("cli", () => {
     expect(payload.model).toBe("openai/gpt-5-codex");
   });
 
-  test("use enters interactive selection when model is omitted", async () => {
+  test("use searches models directly when model is omitted", async () => {
     writeJson(path.join(claudeDir, "settings.openrouter.json"), {
       env: {
         ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
@@ -354,7 +399,7 @@ describe("cli", () => {
     });
 
     const capturedChoices: Array<{ message: string; choices: string[] }> = [];
-    const answers = ["anthropic", "anthropic/claude-sonnet-4.6"];
+    const answers = ["anthropic/claude-sonnet-4.6"];
     const program = createProgram({
       claudeDir,
       logger,
@@ -362,9 +407,9 @@ describe("cli", () => {
         { id: "anthropic/claude-sonnet-4.6" },
         { id: "openai/gpt-5-codex" },
       ],
-      select: async (message, choices) => {
+      search: async (message, choices) => {
         capturedChoices.push({ message, choices });
-        return answers.shift() || "";
+        return answers.shift() || null;
       },
     });
 
@@ -373,8 +418,7 @@ describe("cli", () => {
     const active = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) as {
       model: string;
     };
-    expect(capturedChoices[0].choices).toEqual(["anthropic", "openai"]);
-    expect(capturedChoices[1].choices).toEqual(["anthropic/claude-sonnet-4.6"]);
+    expect(capturedChoices[0].choices).toEqual(["anthropic/claude-sonnet-4.6", "openai/gpt-5-codex"]);
     expect(active.model).toBe("anthropic/claude-sonnet-4.6");
   });
 

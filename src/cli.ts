@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import enquirer from "enquirer";
+import { search as inquirerSearch, select as inquirerSelect } from "@inquirer/prompts";
 import readline from "node:readline";
 import pc from "picocolors";
 
@@ -14,17 +14,19 @@ import {
   switchProfile,
   updateProfileModel,
 } from "./claude-config";
+import { createSearchSource, isPromptCancelledError } from "./prompt-helpers";
 import { detectProviderKind, fetchOpenRouterModels, filterModelsByVendor } from "./providers/openrouter";
 import type { Logger, ModelEntry, Settings } from "./types";
 
 type AskFn = (message: string, defaultValue?: string | null) => Promise<string | null>;
-type SelectFn = (message: string, choices: string[]) => Promise<string>;
+type SelectFn = (message: string, choices: string[]) => Promise<string | null>;
+type SearchFn = (message: string, choices: string[]) => Promise<string | null>;
 
 interface ProgramOptions {
   claudeDir?: string;
   logger?: Logger;
   fetchModels?: () => Promise<ModelEntry[]>;
-  select?: SelectFn;
+  search?: SearchFn;
   ask?: AskFn;
 }
 
@@ -58,7 +60,7 @@ const HELP_EPILOG = [
   "",
   "Notes:",
   "  OpenRouter model discovery works when ANTHROPIC_BASE_URL contains openrouter.ai.",
-  "  In interactive pick mode, if --vendor is omitted, you will choose a vendor first.",
+  "  In interactive pick mode, --vendor narrows the model search results.",
   "  Other profiles can still be switched and edited, but model discovery is not implemented yet.",
 ].join("\n");
 
@@ -66,7 +68,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
   const claudeDir = options.claudeDir;
   const logger = options.logger || console;
   const fetchModels = options.fetchModels || fetchOpenRouterModels;
-  const select = options.select || selectFromList;
+  const search = options.search || searchFromList;
   const ask = options.ask || promptInput;
   const program = new Command();
 
@@ -141,7 +143,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
     .option("--json", "Output switch result as JSON")
     .action(async function (this: Command, profile?: string) {
       const opts = this.opts<{ json?: boolean }>();
-      const targetProfile = profile || (await chooseProfile(select, claudeDir));
+      const targetProfile = profile || (await chooseProfile(search, claudeDir));
 
       if (!targetProfile) {
         logger.error("No Claude profiles found.");
@@ -178,7 +180,12 @@ export function createProgram(options: ProgramOptions = {}): Command {
         return;
       }
 
-      const chosenProfile = await select("Choose a profile", profiles);
+      const chosenProfile = await search("Choose a profile", profiles);
+      if (!chosenProfile) {
+        logger.error("Selection cancelled.");
+        process.exitCode = 1;
+        return;
+      }
       switchProfile(chosenProfile, claudeDir);
       logger.log(pc.green(`Switched to profile: ${chosenProfile}`));
 
@@ -191,8 +198,14 @@ export function createProgram(options: ProgramOptions = {}): Command {
       }
 
       const models = await fetchModels();
-      const vendor = opts.vendor || (await select("Choose a vendor", listVendors(models)));
-      const chosenModel = await select("Choose a model", filterModelsByVendor(models, vendor));
+      const modelIds = filterModelsByVendor(models, opts.vendor);
+      const chosenModel = await search("Choose a model", modelIds);
+
+      if (!chosenModel) {
+        logger.error("Selection cancelled.");
+        process.exitCode = 1;
+        return;
+      }
 
       updateProfileModel(chosenProfile, chosenModel, claudeDir);
       logger.log(pc.green(`Updated ${chosenProfile} model to ${chosenModel}`));
@@ -251,7 +264,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
         return;
       }
 
-      const nextModel = model || (await chooseModelForProfile(profile, claudeDir, fetchModels, select, logger));
+      const nextModel = model || (await chooseModelForProfile(profile, claudeDir, fetchModels, search, logger));
 
       if (!nextModel) {
         process.exitCode = 1;
@@ -406,36 +419,52 @@ function readProfileLikeSettings(profile: string | null, claudeDir?: string): Se
 }
 
 async function promptInput(message: string, defaultValue?: string | null): Promise<string | null> {
-  if (!shouldUseRichPrompts()) {
-    return promptInputSimple(message, defaultValue);
-  }
-
-  const { Input } = enquirer as unknown as {
-    Input: new (options: { message: string; initial?: string }) => { run(): Promise<string> };
-  };
-  const prompt = new Input({
-    message,
-    initial: defaultValue || undefined,
-  });
-
-  const value = (await prompt.run()) as string;
-  return value || defaultValue || null;
+  return promptInputSimple(message, defaultValue);
 }
 
-async function selectFromList(message: string, choices: string[]): Promise<string> {
+async function selectFromList(message: string, choices: string[]): Promise<string | null> {
   if (!shouldUseRichPrompts()) {
     return selectFromListSimple(message, choices);
   }
 
-  const { AutoComplete } = enquirer as unknown as {
-    AutoComplete: new (options: { message: string; choices: string[] }) => { run(): Promise<string> };
-  };
-  const prompt = new AutoComplete({
-    message,
-    choices,
-  });
+  try {
+    const value = await inquirerSelect({
+      message,
+      choices: choices.map((choice) => ({
+        name: choice,
+        value: choice,
+      })),
+    });
 
-  return (await prompt.run()) as string;
+    return value || null;
+  } catch (error) {
+    if (isPromptCancelledError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+async function searchFromList(message: string, choices: string[]): Promise<string | null> {
+  if (!shouldUseRichPrompts()) {
+    return selectFromListSimple(message, choices);
+  }
+
+  try {
+    const value = await inquirerSearch({
+      message,
+      source: createSearchSource(choices),
+    });
+
+    return value || null;
+  } catch (error) {
+    if (isPromptCancelledError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 async function promptInputSimple(message: string, defaultValue?: string | null): Promise<string | null> {
@@ -484,23 +513,13 @@ function printJson(logger: Logger, payload: unknown): void {
   logger.log(JSON.stringify(payload, null, 2));
 }
 
-async function chooseProfile(select: SelectFn, claudeDir?: string): Promise<string | null> {
+async function chooseProfile(search: SearchFn, claudeDir?: string): Promise<string | null> {
   const profiles = listProfiles(claudeDir);
   if (!profiles.length) {
     return null;
   }
 
-  return select("Choose a profile", profiles);
-}
-
-function listVendors(models: ModelEntry[]): string[] {
-  return Array.from(
-    new Set(
-      models
-        .map((entry) => String(entry.id || "").split("/")[0])
-        .filter(Boolean)
-    )
-  ).sort();
+  return search("Choose a profile", profiles);
 }
 
 function readModel(settings: Settings): string | null {
@@ -511,7 +530,7 @@ async function chooseModelForProfile(
   profile: string,
   claudeDir: string | undefined,
   fetchModels: () => Promise<ModelEntry[]>,
-  select: SelectFn,
+  search: SearchFn,
   logger: Logger
 ): Promise<string | null> {
   const settings = readProfile(profile, claudeDir);
@@ -523,8 +542,14 @@ async function chooseModelForProfile(
   }
 
   const models = await fetchModels();
-  const vendor = await select("Choose a vendor", listVendors(models));
-  return select("Choose a model", filterModelsByVendor(models, vendor));
+  const modelIds = models.map((entry) => String(entry.id || "")).filter(Boolean);
+
+  if (!modelIds.length) {
+    logger.error(`No models found for profile: ${profile}`);
+    return null;
+  }
+
+  return search("Choose a model", modelIds);
 }
 
 function currentPayload(activeProfile: string, settings: Settings): { activeProfile: string; model: string | null; baseUrl: string | null } {

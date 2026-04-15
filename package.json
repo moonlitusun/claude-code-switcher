@@ -40,8 +40,8 @@
     "bun": ">=1.2.16"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.0.0",
     "commander": "^9.5.0",
-    "enquirer": "^2.4.1",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
