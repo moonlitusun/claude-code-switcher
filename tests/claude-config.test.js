@@ -8,6 +8,8 @@ const {
   switchProfile,
   updateProfileModel,
   createProfile,
+  deleteProfile,
+  editProfile,
 } = require("../src/claude-config");
 
 function writeJson(file, value) {
@@ -136,5 +138,52 @@ describe("claude config", () => {
     expect(profileData.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
     expect(profileData.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe("1");
     expect(profileData.env.ANTHROPIC_MODEL).toBe("anthropic/claude-sonnet-4.6");
+  });
+
+  test("deletes a non-active profile file", () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {});
+
+    deleteProfile("openrouter", claudeDir);
+
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(false);
+  });
+
+  test("edits an existing profile while preserving unrelated settings", () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      enabledPlugins: {
+        "provider@claude-provider-plugin": true,
+      },
+      env: {
+        ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+        CUSTOM_FLAG: "keep-me",
+      },
+      model: "anthropic/claude-sonnet-4.6",
+      apiKeyHelper: "zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'",
+    });
+
+    editProfile(
+      "openrouter",
+      {
+        baseUrl: "https://openrouter.ai/api/v2",
+        apiKeyEnv: "ALT_OPENROUTER_KEY",
+        model: "openai/gpt-5-codex",
+      },
+      claudeDir
+    );
+
+    const profileData = JSON.parse(
+      fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")
+    );
+
+    expect(profileData.enabledPlugins).toEqual({
+      "provider@claude-provider-plugin": true,
+    });
+    expect(profileData.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api/v2");
+    expect(profileData.env.CUSTOM_FLAG).toBe("keep-me");
+    expect(profileData.model).toBe("openai/gpt-5-codex");
+    expect(profileData.apiKeyHelper).toBe(
+      "zsh -lc 'printf %s \"$ALT_OPENROUTER_KEY\"'"
+    );
   });
 });

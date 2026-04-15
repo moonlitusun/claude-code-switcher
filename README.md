@@ -20,9 +20,12 @@ This tool is for people who want to:
 - show the active profile, model, and base URL
 - switch profiles by updating `~/.claude/settings.json`
 - interactively pick a profile and model
+- filter interactive model selection by vendor
 - list OpenRouter models, optionally filtered by vendor
 - update the default model fields for a profile and the active settings
 - create new profiles without hand-editing JSON
+- delete saved profiles
+- edit saved profiles without opening JSON
 
 ## Install
 
@@ -37,6 +40,7 @@ After linking, the CLI is available as:
 
 ```bash
 cc-switcher
+// Or
 ccs
 ```
 
@@ -68,6 +72,13 @@ ccs pick
 ```
 
 For OpenRouter-backed profiles, `pick` switches the profile first and then lets you choose a model from the OpenRouter catalog.
+
+To narrow the model list during interactive selection:
+
+```bash
+ccs pick --vendor anthropic
+ccs pick --vendor openai
+```
 
 ### List models for the active profile
 
@@ -110,6 +121,22 @@ ccs create openrouter
 ```
 
 If you omit flags, the CLI prompts for the missing values.
+
+### Edit a saved profile
+
+```bash
+ccs edit openrouter --model openai/gpt-5-codex
+```
+
+You can also run `ccs edit openrouter` with no flags and answer prompts for the current base URL, API key env var, and default model.
+
+### Delete a saved profile
+
+```bash
+ccs delete openrouter
+```
+
+For safety, the CLI refuses to delete the currently active profile.
 
 ## How it works
 
@@ -164,8 +191,15 @@ Run tests:
 npm test
 ```
 
+Show CLI help:
+
+```bash
+node bin/cc-switcher.js --help
+```
+
+The help output includes examples and notes for the most common profile and model workflows.
+
 ## Roadmap
 
 - add provider adapters for more hosted backends
-- add interactive model selection
-- add profile creation and editing commands
+- improve interactive prompts and multi-step flows

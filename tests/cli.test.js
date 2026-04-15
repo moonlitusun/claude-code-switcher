@@ -109,6 +109,40 @@ describe("cli", () => {
     expect(logs.join("\n")).toContain("Updated openrouter model to anthropic/claude-sonnet-4.6");
   });
 
+  test("pick respects vendor filtering when selecting models", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: {
+        ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+      },
+      model: "old-model",
+    });
+    writeJson(path.join(claudeDir, "settings.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+      model: "old-model",
+    });
+
+    const capturedChoices = [];
+    const answers = ["openrouter", "openai/gpt-5-codex"];
+    const program = createProgram({
+      claudeDir,
+      logger,
+      fetchModels: async () => [
+        { id: "anthropic/claude-sonnet-4.6" },
+        { id: "openai/gpt-5-codex" },
+      ],
+      select: async (message, choices) => {
+        capturedChoices.push({ message, choices });
+        return answers.shift();
+      },
+    });
+
+    await program.parseAsync(["node", "cc-switcher", "pick", "--vendor", "openai"], {
+      from: "node",
+    });
+
+    expect(capturedChoices[1].choices).toEqual(["openai/gpt-5-codex"]);
+  });
+
   test("create writes a new profile from command options", async () => {
     const program = createProgram({
       claudeDir,
@@ -137,5 +171,74 @@ describe("cli", () => {
     expect(profile.apiKeyHelper).toBe("zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'");
     expect(profile.model).toBe("anthropic/claude-sonnet-4.6");
     expect(logs.join("\n")).toContain("Created profile: openrouter");
+  });
+
+  test("delete removes a profile", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+    });
+
+    const program = createProgram({
+      claudeDir,
+      logger,
+    });
+
+    await program.parseAsync(["node", "cc-switcher", "delete", "openrouter"], {
+      from: "node",
+    });
+
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(false);
+    expect(logs.join("\n")).toContain("Deleted profile: openrouter");
+  });
+
+  test("edit updates an existing profile from command options", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: {
+        ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+      },
+      model: "anthropic/claude-sonnet-4.6",
+      apiKeyHelper: "zsh -lc 'printf %s \"$OPENROUTER_API_KEY\"'",
+    });
+
+    const program = createProgram({
+      claudeDir,
+      logger,
+    });
+
+    await program.parseAsync(
+      [
+        "node",
+        "cc-switcher",
+        "edit",
+        "openrouter",
+        "--base-url",
+        "https://openrouter.ai/api/v2",
+        "--api-key-env",
+        "ALT_OPENROUTER_KEY",
+        "--model",
+        "openai/gpt-5-codex",
+      ],
+      { from: "node" }
+    );
+
+    const profile = JSON.parse(
+      fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")
+    );
+    expect(profile.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api/v2");
+    expect(profile.model).toBe("openai/gpt-5-codex");
+    expect(profile.apiKeyHelper).toBe("zsh -lc 'printf %s \"$ALT_OPENROUTER_KEY\"'");
+    expect(logs.join("\n")).toContain("Updated profile: openrouter");
+  });
+
+  test("help includes examples and workflow notes", () => {
+    const program = createProgram({ claudeDir, logger });
+    const helpText = program.helpInformation();
+
+    expect(helpText).toContain("Examples:");
+    expect(helpText).toContain("ccs switch openrouter");
+    expect(helpText).toContain("ccs pick --vendor anthropic");
+    expect(helpText).toContain("Notes:");
+    expect(helpText).toContain("OpenRouter model discovery");
   });
 });

@@ -134,14 +134,57 @@ function readProfile(name, claudeDir) {
 function createProfile(options, claudeDir) {
   const profileName = options.profile;
   const model = options.model;
-  let next = {
-    env: {
-      ANTHROPIC_BASE_URL: options.baseUrl,
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
-        options.disableNonessentialTraffic === false ? "0" : "1",
-    },
-    model,
-  };
+  let next = buildProfileSettings({}, options);
+
+  writeJson(getProfilePath(profileName, claudeDir), next);
+  return next;
+}
+
+function deleteProfile(name, claudeDir) {
+  const profilePath = getProfilePath(name, claudeDir);
+  if (!fs.existsSync(profilePath)) {
+    throw new Error("Profile not found: " + name);
+  }
+
+  if (detectActiveProfile(claudeDir) === name) {
+    throw new Error("Cannot delete the active profile: " + name);
+  }
+
+  fs.unlinkSync(profilePath);
+}
+
+function editProfile(name, updates, claudeDir) {
+  const profilePath = getProfilePath(name, claudeDir);
+  if (!fs.existsSync(profilePath)) {
+    throw new Error("Profile not found: " + name);
+  }
+
+  const current = readJson(profilePath);
+  const next = buildProfileSettings(current, updates);
+  writeJson(profilePath, next);
+
+  if (detectActiveProfile(claudeDir) === name) {
+    switchProfile(name, claudeDir);
+  }
+
+  return next;
+}
+
+function buildProfileSettings(base, options) {
+  let next = Object.assign({}, base, {
+    env: Object.assign({}, base.env || {}),
+  });
+
+  if (options.baseUrl) {
+    next.env.ANTHROPIC_BASE_URL = options.baseUrl;
+  }
+
+  if (options.disableNonessentialTraffic !== undefined) {
+    next.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC =
+      options.disableNonessentialTraffic === false ? "0" : "1";
+  } else if (!next.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC) {
+    next.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+  }
 
   if (options.apiKeyHelper) {
     next.apiKeyHelper = options.apiKeyHelper;
@@ -150,11 +193,12 @@ function createProfile(options, claudeDir) {
       "zsh -lc 'printf %s \"$" + options.apiKeyEnv + "\"'";
   }
 
-  if (model) {
-    next = applyModel(next, model);
+  if (options.model) {
+    next = applyModel(next, options.model);
+  } else if (!next.model && base.model) {
+    next.model = base.model;
   }
 
-  writeJson(getProfilePath(profileName, claudeDir), next);
   return next;
 }
 
@@ -168,4 +212,6 @@ module.exports = {
   readCurrentSettings,
   readProfile,
   createProfile,
+  deleteProfile,
+  editProfile,
 };

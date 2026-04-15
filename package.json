@@ -2,6 +2,23 @@
   "name": "cc-switcher",
   "version": "0.1.0",
   "description": "CLI for switching Claude Code providers and models",
+  "license": "MIT",
+  "homepage": "https://github.com/rocsun/cc-switcher",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocsun/cc-switcher.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rocsun/cc-switcher/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "cli",
+    "openrouter",
+    "model-switcher",
+    "provider-switcher"
+  ],
   "bin": {
     "cc-switcher": "./bin/cc-switcher.js",
     "ccs": "./bin/cc-switcher.js"

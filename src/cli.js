@@ -9,8 +9,26 @@ const {
   readCurrentSettings,
   readProfile,
   createProfile,
+  deleteProfile,
+  editProfile,
 } = require("./claude-config");
 const { detectProviderKind, filterModelsByVendor, fetchOpenRouterModels } = require("./providers/openrouter");
+
+const HELP_EPILOG = [
+  "",
+  "Examples:",
+  "  ccs profiles",
+  "  ccs switch openrouter",
+  "  ccs models openrouter anthropic",
+  "  ccs pick --vendor anthropic",
+  "  ccs use openai/gpt-5-codex --profile openrouter",
+  "  ccs create openrouter --base-url https://openrouter.ai/api --api-key-env OPENROUTER_API_KEY",
+  "  ccs edit openrouter --model anthropic/claude-sonnet-4.6",
+  "",
+  "Notes:",
+  "  OpenRouter model discovery works when ANTHROPIC_BASE_URL contains openrouter.ai.",
+  "  Other profiles can still be switched and edited, but model discovery is not implemented yet.",
+].join("\n");
 
 function createProgram(options) {
   const claudeDir = options && options.claudeDir;
@@ -22,7 +40,13 @@ function createProgram(options) {
 
   program
     .name("cc-switcher")
-    .description("Switch Claude Code provider profiles and models");
+    .description("Switch Claude Code provider profiles and models")
+    .showHelpAfterError("(run with --help for usage examples)");
+
+  const defaultHelpInformation = program.helpInformation.bind(program);
+  program.helpInformation = function () {
+    return defaultHelpInformation() + "\n" + HELP_EPILOG + "\n";
+  };
 
   program
     .command("profiles")
@@ -70,7 +94,8 @@ function createProgram(options) {
   program
     .command("pick")
     .description("Interactively choose a profile and model")
-    .action(async () => {
+    .option("--vendor <vendor>", "Filter models by vendor during selection")
+    .action(async (command) => {
       const profiles = listProfiles(claudeDir);
 
       if (!profiles.length) {
@@ -94,7 +119,7 @@ function createProgram(options) {
       const models = await fetchModels();
       const chosenModel = await select(
         "Choose a model",
-        filterModelsByVendor(models)
+        filterModelsByVendor(models, command.vendor)
       );
 
       updateProfileModel(chosenProfile, chosenModel, claudeDir);
@@ -170,6 +195,51 @@ function createProgram(options) {
       logger.log(pc.green("Created profile: " + profile));
     });
 
+  program
+    .command("edit <profile>")
+    .description("Edit a Claude profile")
+    .option("--base-url <url>", "Provider base URL")
+    .option("--api-key-env <name>", "Environment variable that stores the API key")
+    .option("--api-key-helper <command>", "Explicit apiKeyHelper command")
+    .option("--model <model>", "Default model to save")
+    .action(async (profile, command) => {
+      const current = readProfile(profile, claudeDir);
+
+      if (!current) {
+        logger.error("Profile not found: " + profile);
+        process.exitCode = 1;
+        return;
+      }
+
+      const baseUrl =
+        command.baseUrl || (await ask("Base URL", current.env && current.env.ANTHROPIC_BASE_URL));
+      const model =
+        command.model || (await ask("Default model", current.model || current.env && current.env.ANTHROPIC_MODEL));
+      const apiKeyEnv =
+        command.apiKeyEnv ||
+        (!command.apiKeyHelper ? await ask("API key env var", inferApiKeyEnv(current.apiKeyHelper)) : null);
+
+      editProfile(
+        profile,
+        {
+          baseUrl,
+          apiKeyEnv,
+          apiKeyHelper: command.apiKeyHelper,
+          model,
+        },
+        claudeDir
+      );
+      logger.log(pc.green("Updated profile: " + profile));
+    });
+
+  program
+    .command("delete <profile>")
+    .description("Delete a Claude profile")
+    .action((profile) => {
+      deleteProfile(profile, claudeDir);
+      logger.log(pc.green("Deleted profile: " + profile));
+    });
+
   return program;
 }
 
@@ -205,6 +275,15 @@ async function selectFromList(message, choices) {
     return answer;
   }
   throw new Error("Invalid selection: " + answer);
+}
+
+function inferApiKeyEnv(apiKeyHelper) {
+  if (!apiKeyHelper) {
+    return "OPENROUTER_API_KEY";
+  }
+
+  const match = apiKeyHelper.match(/\$([A-Z0-9_]+)/);
+  return match ? match[1] : "OPENROUTER_API_KEY";
 }
 
 module.exports = {
