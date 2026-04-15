@@ -2,48 +2,34 @@
 
 `cc-switcher` is a Bun-first TypeScript CLI for managing Claude Code provider profiles and default models.
 
-It keeps the profile-based workflow that tools like `claude-code-switch` made convenient, and adds model discovery plus model switching for OpenRouter-backed profiles.
+It is built for people who keep Claude Code configs in `~/.claude/settings.json` and `~/.claude/settings.<profile>.json`, and want a faster way to:
 
-## Why
+- switch between saved provider profiles
+- see the active profile, model, and base URL
+- discover available OpenRouter models
+- update a profile's default model without editing JSON by hand
 
-Claude Code gives you a model picker inside a session, but many provider setups still live in `~/.claude/settings.json` and `~/.claude/settings.<profile>.json`.
+The CLI is available as both `cc-switcher` and `ccs`.
 
-This tool is for people who want to:
+## Quick Start
 
-- switch Claude Code provider profiles quickly
-- see which models are available for a provider-backed profile
-- update the default model for a profile without editing JSON by hand
+If you only want the shortest path from install to use, follow this order:
 
-## Features
+1. Install the CLI
+2. Check which profiles exist
+3. Inspect the active profile
+4. Switch to the profile you want
+5. Update or pick a model
 
-- list Claude profiles from `~/.claude`
-- show the active profile, model, and base URL
-- switch profiles by updating `~/.claude/settings.json`
-- interactively pick a profile and model
-- filter interactive model selection by vendor
-- list OpenRouter models, optionally filtered by vendor
-- support JSON output for script-friendly queries
-- update the default model fields for a profile and the active settings
-- create new profiles without hand-editing JSON
-- delete saved profiles
-- edit saved profiles without opening JSON
+### Install
 
-## Install
-
-### From npm
+#### From npm
 
 ```bash
 npm install -g @sunday-sky/cc-switcher
 ```
 
-After installation, the CLI is available as:
-
-```bash
-cc-switcher
-ccs
-```
-
-### Local development
+#### Local development
 
 Requirements:
 
@@ -54,111 +40,108 @@ bun install
 bun link
 ```
 
-## Usage
+## First Run
 
-### List saved profiles
+### 1. See your saved profiles
 
 ```bash
 ccs profiles
 ccs profiles --json
 ```
 
-### Show the active profile
+This lists profiles discovered from `~/.claude/settings.<name>.json`.
+The active profile is marked with `*`.
+
+### 2. Check what is active right now
 
 ```bash
 ccs current
 ccs current --json
 ```
 
-### Switch profile
+This shows:
+
+- the active profile name
+- the current model
+- the configured base URL
+
+### 3. Switch to another profile
 
 ```bash
-ccs switch
 ccs switch openrouter
 ccs switch local-gateway
-ccs switch openrouter --json
+ccs switch
 ```
 
 If you omit the profile, `ccs switch` opens a searchable selector.
-In non-standard terminals or wrapped shells, the selector automatically falls back to a simpler prompt to avoid noisy redraw output.
+In non-standard terminals or wrapped shells, the selector falls back to a simpler prompt to avoid noisy redraw output.
 
-### Interactively pick a profile and model
+### 4. Update the model for the active profile
+
+```bash
+ccs use anthropic/claude-sonnet-4.6
+ccs use anthropic/claude-sonnet-4.6 --json
+```
+
+If you omit the model, `ccs use` opens an interactive vendor-and-model picker.
+It uses a searchable terminal UI when available, and falls back to a simpler prompt in terminals that do not behave well with advanced redraw output.
+
+### 5. Pick a profile and model in one flow
 
 ```bash
 ccs pick
-```
-
-For OpenRouter-backed profiles, `pick` switches the profile first and then lets you choose a model from the OpenRouter catalog.
-The picker uses a real terminal selection UI instead of raw numeric input.
-If you do not pass `--vendor`, the CLI first asks you to choose a vendor and then shows the matching models.
-
-To narrow the model list during interactive selection:
-
-```bash
 ccs pick --vendor anthropic
 ccs pick --vendor openai
 ```
 
-### List models for the active profile
+`pick` first switches the profile, then updates the model if the selected profile supports model discovery.
+For OpenRouter-backed profiles, the CLI can first ask you to choose a vendor and then narrow the model list to that vendor.
+
+## Common Workflows
+
+### Check available OpenRouter models
 
 ```bash
 ccs models
 ccs models --json
 ```
 
-### List models for a specific profile and vendor
+To inspect a different profile:
 
 ```bash
+ccs models openrouter
 ccs models openrouter anthropic
 ccs models openrouter openai
 ccs models openrouter anthropic --json
 ```
 
-### Update the active profile model
+Model discovery works when `ANTHROPIC_BASE_URL` contains `openrouter.ai`.
 
-```bash
-ccs use
-ccs use anthropic/claude-sonnet-4.6
-ccs use anthropic/claude-sonnet-4.6 --json
-```
-
-If you omit the model, `ccs use` opens a searchable flow for vendor and model selection.
-In non-standard terminals or wrapped shells, the interactive flow automatically falls back to a simpler prompt to avoid noisy redraw output.
-
-### Update a specific profile model
-
-```bash
-ccs use openai/gpt-5-codex --profile openrouter
-```
-
-### Create a profile from flags
+### Create a new profile
 
 ```bash
 ccs create openrouter \
   --base-url https://openrouter.ai/api \
   --api-key-env OPENROUTER_API_KEY \
-  --model anthropic/claude-sonnet-4.6 \
-  --json
+  --model anthropic/claude-sonnet-4.6
 ```
 
-### Create a profile interactively
+If you skip flags, `create` prompts for the missing values:
 
 ```bash
 ccs create openrouter
 ```
 
-If you omit flags, the CLI prompts for the missing values.
-
-### Edit a saved profile
+### Edit an existing profile
 
 ```bash
 ccs edit openrouter --model openai/gpt-5-codex
 ccs edit openrouter --model openai/gpt-5-codex --json
 ```
 
-You can also run `ccs edit openrouter` with no flags and answer prompts for the current base URL, API key env var, and default model.
+If you run `ccs edit openrouter` without flags, the CLI prompts for the current base URL, API key env var, and default model.
 
-### Delete a saved profile
+### Delete a profile
 
 ```bash
 ccs delete openrouter
@@ -167,7 +150,100 @@ ccs delete openrouter --json
 
 For safety, the CLI refuses to delete the currently active profile.
 
-## How it works
+## Command Reference
+
+### `profiles`
+
+List saved Claude profiles.
+
+```bash
+ccs profiles
+ccs profiles --json
+```
+
+### `current`
+
+Show the active profile, model, and base URL.
+
+```bash
+ccs current
+ccs current --json
+```
+
+### `switch [profile]`
+
+Switch to a saved Claude profile.
+
+```bash
+ccs switch
+ccs switch openrouter
+ccs switch openrouter --json
+```
+
+### `pick`
+
+Interactively choose a profile and model.
+
+```bash
+ccs pick
+ccs pick --vendor anthropic
+```
+
+### `models [profile] [vendor]`
+
+List models for a provider-backed profile.
+
+```bash
+ccs models
+ccs models openrouter
+ccs models openrouter anthropic
+ccs models openrouter anthropic --json
+```
+
+### `use [model]`
+
+Set the default model for the active profile, or for a profile passed with `--profile`.
+
+```bash
+ccs use
+ccs use anthropic/claude-sonnet-4.6
+ccs use openai/gpt-5-codex --profile openrouter
+ccs use openai/gpt-5-codex --profile openrouter --json
+```
+
+### `create <profile>`
+
+Create a Claude profile.
+
+```bash
+ccs create openrouter
+ccs create openrouter \
+  --base-url https://openrouter.ai/api \
+  --api-key-env OPENROUTER_API_KEY \
+  --model anthropic/claude-sonnet-4.6 \
+  --json
+```
+
+### `edit <profile>`
+
+Edit a saved profile.
+
+```bash
+ccs edit openrouter
+ccs edit openrouter --model anthropic/claude-sonnet-4.6
+ccs edit openrouter --model anthropic/claude-sonnet-4.6 --json
+```
+
+### `delete <profile>`
+
+Delete a saved profile.
+
+```bash
+ccs delete openrouter
+ccs delete openrouter --json
+```
+
+## How It Works
 
 Profiles are discovered from:
 
@@ -190,7 +266,22 @@ When you run `ccs use <model>`, the tool updates:
 
 If the target profile is active, `settings.json` is updated too.
 
-## Provider support
+## JSON Output
+
+These commands support `--json`:
+
+- `ccs profiles --json`
+- `ccs current --json`
+- `ccs models [profile] [vendor] --json`
+- `ccs switch <profile> --json`
+- `ccs use <model> [--profile <name>] --json`
+- `ccs create <profile> --json`
+- `ccs edit <profile> --json`
+- `ccs delete <profile> --json`
+
+This makes it easier to script around the CLI from shell pipelines or automation.
+
+## Provider Support
 
 ### OpenRouter
 
@@ -204,7 +295,7 @@ Profiles are treated as OpenRouter profiles when `ANTHROPIC_BASE_URL` contains `
 
 Other profiles can still be switched and updated manually with `ccs use <model>`, but remote model discovery is not implemented yet.
 
-## Respectful attribution
+## Respectful Attribution
 
 This project was inspired by [foreveryh/claude-code-switch](https://github.com/foreveryh/claude-code-switch), which showed a clean, profile-oriented workflow for Claude Code switching.
 
@@ -257,24 +348,3 @@ bun run build
 ```
 
 This happens automatically through `prepublishOnly`, so the published package uses the built file from `dist/`.
-
-## JSON output
-
-These commands support `--json`:
-
-- `ccs profiles --json`
-- `ccs current --json`
-- `ccs models [profile] [vendor] --json`
-- `ccs switch <profile> --json`
-- `ccs use <model> [--profile <name>] --json`
-- `ccs create <profile> --json`
-- `ccs edit <profile> --json`
-- `ccs delete <profile> --json`
-
-This makes it easier to script around the CLI from shell pipelines or automation.
-
-## Roadmap
-
-- add provider adapters for more hosted backends
-- improve interactive prompts and multi-step flows
-- improve release automation
