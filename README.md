@@ -30,22 +30,28 @@ This tool is for people who want to:
 
 ## Install
 
-### Requirements
-
-- Bun `>= 1.2.16`
-
-### Local development
+### From npm
 
 ```bash
-bun install
-bun link
+npm install -g @sunday-sky/cc-switcher
 ```
 
-After linking, the CLI is available as:
+After installation, the CLI is available as:
 
 ```bash
 cc-switcher
 ccs
+```
+
+### Local development
+
+Requirements:
+
+- Bun `>= 1.2.16`
+
+```bash
+bun install
+bun link
 ```
 
 ## Usage
@@ -67,10 +73,13 @@ ccs current --json
 ### Switch profile
 
 ```bash
+ccs switch
 ccs switch openrouter
 ccs switch local-gateway
 ccs switch openrouter --json
 ```
+
+If you omit the profile, `ccs switch` opens a searchable selector.
 
 ### Interactively pick a profile and model
 
@@ -107,9 +116,12 @@ ccs models openrouter anthropic --json
 ### Update the active profile model
 
 ```bash
+ccs use
 ccs use anthropic/claude-sonnet-4.6
 ccs use anthropic/claude-sonnet-4.6 --json
 ```
+
+If you omit the model, `ccs use` opens a searchable flow for vendor and model selection.
 
 ### Update a specific profile model
 

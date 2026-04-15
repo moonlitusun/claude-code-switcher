@@ -33,12 +33,14 @@ const HELP_EPILOG = [
   "  ccs profiles",
   "  ccs profiles --json",
   "  ccs current --json",
+  "  ccs switch",
   "  ccs switch openrouter",
   "  ccs switch openrouter --json",
   "  ccs models openrouter anthropic",
   "  ccs models openrouter anthropic --json",
   "  ccs pick",
   "  ccs pick --vendor anthropic",
+  "  ccs use",
   "  ccs use openai/gpt-5-codex --profile openrouter",
   "  ccs use openai/gpt-5-codex --profile openrouter --json",
   "  ccs create openrouter --base-url https://openrouter.ai/api --api-key-env OPENROUTER_API_KEY",
@@ -127,16 +129,24 @@ export function createProgram(options: ProgramOptions = {}): Command {
     });
 
   program
-    .command("switch <profile>")
+    .command("switch [profile]")
     .description("Switch to a saved Claude profile")
     .option("--json", "Output switch result as JSON")
-    .action(function (this: Command, profile: string) {
+    .action(async function (this: Command, profile?: string) {
       const opts = this.opts<{ json?: boolean }>();
-      const next = switchProfile(profile, claudeDir);
+      const targetProfile = profile || (await chooseProfile(select, claudeDir));
+
+      if (!targetProfile) {
+        logger.error("No Claude profiles found.");
+        process.exitCode = 1;
+        return;
+      }
+
+      const next = switchProfile(targetProfile, claudeDir);
 
       if (opts.json) {
         printJson(logger, {
-          profile,
+          profile: targetProfile,
           switched: true,
           model: readModel(next),
           baseUrl: next.env?.ANTHROPIC_BASE_URL || null,
@@ -144,7 +154,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
         return;
       }
 
-      logger.log(pc.green(`Switched to profile: ${profile}`));
+      logger.log(pc.green(`Switched to profile: ${targetProfile}`));
     });
 
   program
@@ -220,11 +230,11 @@ export function createProgram(options: ProgramOptions = {}): Command {
     });
 
   program
-    .command("use <model>")
+    .command("use [model]")
     .description("Set the default model for a profile")
     .option("-p, --profile <profile>", "Profile name to update")
     .option("--json", "Output update result as JSON")
-    .action(function (this: Command, model: string) {
+    .action(async function (this: Command, model?: string) {
       const opts = this.opts<{ profile?: string; json?: boolean }>();
       const profile = opts.profile || detectActiveProfile(claudeDir);
 
@@ -234,18 +244,25 @@ export function createProgram(options: ProgramOptions = {}): Command {
         return;
       }
 
-      updateProfileModel(profile, model, claudeDir);
+      const nextModel = model || (await chooseModelForProfile(profile, claudeDir, fetchModels, select, logger));
+
+      if (!nextModel) {
+        process.exitCode = 1;
+        return;
+      }
+
+      updateProfileModel(profile, nextModel, claudeDir);
 
       if (opts.json) {
         printJson(logger, {
           profile,
           updated: true,
-          model,
+          model: nextModel,
         });
         return;
       }
 
-      logger.log(pc.green(`Updated ${profile} model to ${model}`));
+      logger.log(pc.green(`Updated ${profile} model to ${nextModel}`));
     });
 
   program
@@ -395,10 +412,10 @@ async function promptInput(message: string, defaultValue?: string | null): Promi
 }
 
 async function selectFromList(message: string, choices: string[]): Promise<string> {
-  const { Select } = enquirer as unknown as {
-    Select: new (options: { message: string; choices: string[] }) => { run(): Promise<string> };
+  const { AutoComplete } = enquirer as unknown as {
+    AutoComplete: new (options: { message: string; choices: string[] }) => { run(): Promise<string> };
   };
-  const prompt = new Select({
+  const prompt = new AutoComplete({
     message,
     choices,
   });
@@ -419,6 +436,15 @@ function printJson(logger: Logger, payload: unknown): void {
   logger.log(JSON.stringify(payload, null, 2));
 }
 
+async function chooseProfile(select: SelectFn, claudeDir?: string): Promise<string | null> {
+  const profiles = listProfiles(claudeDir);
+  if (!profiles.length) {
+    return null;
+  }
+
+  return select("Choose a profile", profiles);
+}
+
 function listVendors(models: ModelEntry[]): string[] {
   return Array.from(
     new Set(
@@ -431,6 +457,26 @@ function listVendors(models: ModelEntry[]): string[] {
 
 function readModel(settings: Settings): string | null {
   return settings.model || settings.env?.ANTHROPIC_MODEL || null;
+}
+
+async function chooseModelForProfile(
+  profile: string,
+  claudeDir: string | undefined,
+  fetchModels: () => Promise<ModelEntry[]>,
+  select: SelectFn,
+  logger: Logger
+): Promise<string | null> {
+  const settings = readProfile(profile, claudeDir);
+  const providerKind = detectProviderKind(settings?.env?.ANTHROPIC_BASE_URL);
+
+  if (providerKind !== "openrouter") {
+    logger.error(`Interactive model selection is not supported yet for profile: ${profile}`);
+    return null;
+  }
+
+  const models = await fetchModels();
+  const vendor = await select("Choose a vendor", listVendors(models));
+  return select("Choose a model", filterModelsByVendor(models, vendor));
 }
 
 function currentPayload(activeProfile: string, settings: Settings): { activeProfile: string; model: string | null; baseUrl: string | null } {

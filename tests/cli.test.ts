@@ -282,6 +282,40 @@ describe("cli", () => {
     expect(payload.model).toBe("anthropic/claude-sonnet-4.6");
   });
 
+  test("switch enters interactive selection when profile is omitted", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+      model: "anthropic/claude-sonnet-4.6",
+    });
+    writeJson(path.join(claudeDir, "settings.local-gateway.json"), {
+      env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8317" },
+      model: "gateway-model",
+    });
+    writeJson(path.join(claudeDir, "settings.json"), {
+      env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8317" },
+      model: "gateway-model",
+    });
+
+    const capturedChoices: Array<{ message: string; choices: string[] }> = [];
+    const program = createProgram({
+      claudeDir,
+      logger,
+      select: async (message, choices) => {
+        capturedChoices.push({ message, choices });
+        return "openrouter";
+      },
+    });
+
+    await program.parseAsync(["node", "cc-switcher", "switch"], { from: "node" });
+
+    const active = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) as {
+      env: Record<string, string>;
+    };
+    expect(capturedChoices[0].message).toBe("Choose a profile");
+    expect(capturedChoices[0].choices).toEqual(["local-gateway", "openrouter"]);
+    expect(active.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
+  });
+
   test("use supports json output", async () => {
     writeJson(path.join(claudeDir, "settings.openrouter.json"), {
       env: {
@@ -304,6 +338,44 @@ describe("cli", () => {
     const payload = JSON.parse(logs[0]) as { profile: string; model: string };
     expect(payload.profile).toBe("openrouter");
     expect(payload.model).toBe("openai/gpt-5-codex");
+  });
+
+  test("use enters interactive selection when model is omitted", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: {
+        ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+        ANTHROPIC_MODEL: "old-model",
+      },
+      model: "old-model",
+    });
+    writeJson(path.join(claudeDir, "settings.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+      model: "old-model",
+    });
+
+    const capturedChoices: Array<{ message: string; choices: string[] }> = [];
+    const answers = ["anthropic", "anthropic/claude-sonnet-4.6"];
+    const program = createProgram({
+      claudeDir,
+      logger,
+      fetchModels: async () => [
+        { id: "anthropic/claude-sonnet-4.6" },
+        { id: "openai/gpt-5-codex" },
+      ],
+      select: async (message, choices) => {
+        capturedChoices.push({ message, choices });
+        return answers.shift() || "";
+      },
+    });
+
+    await program.parseAsync(["node", "cc-switcher", "use"], { from: "node" });
+
+    const active = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) as {
+      model: string;
+    };
+    expect(capturedChoices[0].choices).toEqual(["anthropic", "openai"]);
+    expect(capturedChoices[1].choices).toEqual(["anthropic/claude-sonnet-4.6"]);
+    expect(active.model).toBe("anthropic/claude-sonnet-4.6");
   });
 
   test("delete removes a profile", async () => {
