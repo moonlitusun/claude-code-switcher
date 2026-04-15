@@ -22,6 +22,7 @@ This tool is for people who want to:
 - interactively pick a profile and model
 - filter interactive model selection by vendor
 - list OpenRouter models, optionally filtered by vendor
+- support JSON output for script-friendly queries
 - update the default model fields for a profile and the active settings
 - create new profiles without hand-editing JSON
 - delete saved profiles
@@ -50,12 +51,14 @@ ccs
 
 ```bash
 ccs profiles
+ccs profiles --json
 ```
 
 ### Show the active profile
 
 ```bash
 ccs current
+ccs current --json
 ```
 
 ### Switch profile
@@ -63,6 +66,7 @@ ccs current
 ```bash
 ccs switch openrouter
 ccs switch local-gateway
+ccs switch openrouter --json
 ```
 
 ### Interactively pick a profile and model
@@ -72,6 +76,8 @@ ccs pick
 ```
 
 For OpenRouter-backed profiles, `pick` switches the profile first and then lets you choose a model from the OpenRouter catalog.
+The picker uses a real terminal selection UI instead of raw numeric input.
+If you do not pass `--vendor`, the CLI first asks you to choose a vendor and then shows the matching models.
 
 To narrow the model list during interactive selection:
 
@@ -84,6 +90,7 @@ ccs pick --vendor openai
 
 ```bash
 ccs models
+ccs models --json
 ```
 
 ### List models for a specific profile and vendor
@@ -91,12 +98,14 @@ ccs models
 ```bash
 ccs models openrouter anthropic
 ccs models openrouter openai
+ccs models openrouter anthropic --json
 ```
 
 ### Update the active profile model
 
 ```bash
 ccs use anthropic/claude-sonnet-4.6
+ccs use anthropic/claude-sonnet-4.6 --json
 ```
 
 ### Update a specific profile model
@@ -111,7 +120,8 @@ ccs use openai/gpt-5-codex --profile openrouter
 ccs create openrouter \
   --base-url https://openrouter.ai/api \
   --api-key-env OPENROUTER_API_KEY \
-  --model anthropic/claude-sonnet-4.6
+  --model anthropic/claude-sonnet-4.6 \
+  --json
 ```
 
 ### Create a profile interactively
@@ -126,6 +136,7 @@ If you omit flags, the CLI prompts for the missing values.
 
 ```bash
 ccs edit openrouter --model openai/gpt-5-codex
+ccs edit openrouter --model openai/gpt-5-codex --json
 ```
 
 You can also run `ccs edit openrouter` with no flags and answer prompts for the current base URL, API key env var, and default model.
@@ -134,6 +145,7 @@ You can also run `ccs edit openrouter` with no flags and answer prompts for the 
 
 ```bash
 ccs delete openrouter
+ccs delete openrouter --json
 ```
 
 For safety, the CLI refuses to delete the currently active profile.
@@ -199,7 +211,23 @@ node bin/cc-switcher.js --help
 
 The help output includes examples and notes for the most common profile and model workflows.
 
+## JSON output
+
+These commands support `--json`:
+
+- `ccs profiles --json`
+- `ccs current --json`
+- `ccs models [profile] [vendor] --json`
+- `ccs switch <profile> --json`
+- `ccs use <model> [--profile <name>] --json`
+- `ccs create <profile> --json`
+- `ccs edit <profile> --json`
+- `ccs delete <profile> --json`
+
+This makes it easier to script around the CLI from shell pipelines or automation.
+
 ## Roadmap
 
 - add provider adapters for more hosted backends
 - improve interactive prompts and multi-step flows
+- add json output to mutation commands where useful
