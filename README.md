@@ -2,6 +2,9 @@
 
 `cc-switcher` is a Bun-first TypeScript CLI for managing Claude Code provider profiles and default models.
 
+![Preview](static/preview.mp4)
+
+
 It is built for people who keep Claude Code configs in `~/.claude/settings.json` and `~/.claude/settings.<profile>.json`, and want a faster way to:
 
 - switch between saved provider profiles
