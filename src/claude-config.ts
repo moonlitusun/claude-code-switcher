@@ -133,6 +133,34 @@ export function createProfile(options: ProfileOptions, claudeDir?: string): Sett
   return next;
 }
 
+export function renameProfile(
+  name: string,
+  nextName: string,
+  claudeDir?: string,
+  options?: { overwrite?: boolean }
+): void {
+  const profilePath = getProfilePath(name, claudeDir);
+  const nextProfilePath = getProfilePath(nextName, claudeDir);
+
+  if (!fs.existsSync(profilePath)) {
+    throw new Error(`Profile not found: ${name}`);
+  }
+
+  if (name === nextName) {
+    return;
+  }
+
+  if (fs.existsSync(nextProfilePath)) {
+    if (options?.overwrite) {
+      fs.unlinkSync(nextProfilePath);
+    } else {
+      throw new Error(`Profile already exists: ${nextName}`);
+    }
+  }
+
+  fs.renameSync(profilePath, nextProfilePath);
+}
+
 export function deleteProfile(name: string, claudeDir?: string): void {
   const profilePath = getProfilePath(name, claudeDir);
   if (!fs.existsSync(profilePath)) {

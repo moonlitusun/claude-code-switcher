@@ -310,6 +310,105 @@ describe("cli", () => {
     expect(logs.join("\n")).toContain("Created profile: openrouter");
   });
 
+  test("create overwrites an existing profile when requested", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://old.example.com" },
+      model: "old-model",
+    });
+
+    const program = createProgram({
+      claudeDir,
+      logger,
+      search: async (message, choices) => {
+        expect(message).toContain("already exists");
+        expect(choices).toEqual(["overwrite", "rename", "cancel"]);
+        return "overwrite";
+      },
+    });
+
+    await program.parseAsync(
+      [
+        "node",
+        "cc-switcher",
+        "create",
+        "openrouter",
+        "--base-url",
+        "https://openrouter.ai/api",
+        "--api-key",
+        "sk-test-create",
+        "--model",
+        "anthropic/claude-sonnet-4.6",
+      ],
+      { from: "node" }
+    );
+
+    const profile = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.openrouter.json"), "utf8")) as {
+      env: Record<string, string>;
+      model: string;
+      apiKeyHelper: string;
+    };
+
+    expect(profile.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
+    expect(profile.apiKeyHelper).toBe(literalApiKeyHelper("sk-test-create"));
+    expect(profile.model).toBe("anthropic/claude-sonnet-4.6");
+    expect(logs.join("\n")).toContain("Created profile: openrouter");
+  });
+
+  test("create can rename a conflicting profile before writing", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://old.example.com" },
+      model: "old-model",
+    });
+
+    const prompts: string[] = [];
+    const program = createProgram({
+      claudeDir,
+      logger,
+      search: async (message, choices) => {
+        prompts.push(message);
+        expect(choices).toEqual(["overwrite", "rename", "cancel"]);
+        return "rename";
+      },
+      ask: async (message) => {
+        prompts.push(message);
+        return "openrouter-v2";
+      },
+    });
+
+    await program.parseAsync(
+      [
+        "node",
+        "cc-switcher",
+        "create",
+        "openrouter",
+        "--base-url",
+        "https://openrouter.ai/api",
+        "--api-key",
+        "sk-test-create",
+        "--model",
+        "anthropic/claude-sonnet-4.6",
+      ],
+      { from: "node" }
+    );
+
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(true);
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter-v2.json"))).toBe(true);
+
+    const profile = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.openrouter-v2.json"), "utf8")) as {
+      env: Record<string, string>;
+      model: string;
+      apiKeyHelper: string;
+    };
+
+    expect(profile.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
+    expect(profile.apiKeyHelper).toBe(literalApiKeyHelper("sk-test-create"));
+    expect(profile.model).toBe("anthropic/claude-sonnet-4.6");
+    expect(prompts).toEqual([
+      "Profile openrouter already exists. What do you want to do?",
+      "New profile name",
+    ]);
+  });
+
   test("switch supports json output", async () => {
     writeJson(path.join(claudeDir, "settings.openrouter.json"), {
       env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
@@ -507,6 +606,100 @@ describe("cli", () => {
     expect(profile.model).toBe("openai/gpt-5-codex");
     expect(profile.apiKeyHelper).toBe(literalApiKeyHelper("sk-test-edit-updated"));
     expect(logs.join("\n")).toContain("Updated profile: openrouter");
+  });
+
+  test("rename moves a profile to a new name", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: {
+        ANTHROPIC_BASE_URL: "https://openrouter.ai/api",
+      },
+      model: "anthropic/claude-sonnet-4.6",
+    });
+
+    const program = createProgram({
+      claudeDir,
+      logger,
+    });
+
+    await program.parseAsync(["node", "cc-switcher", "rename", "openrouter", "openrouter-v2"], {
+      from: "node",
+    });
+
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter-v2.json"))).toBe(true);
+    expect(logs.join("\n")).toContain("Renamed profile: openrouter -> openrouter-v2");
+  });
+
+  test("rename can overwrite an existing target profile", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+      model: "source-model",
+    });
+    writeJson(path.join(claudeDir, "settings.openrouter-v2.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://old.example.com" },
+      model: "target-model",
+    });
+
+    const program = createProgram({
+      claudeDir,
+      logger,
+      search: async (message, choices) => {
+        expect(message).toContain("already exists");
+        expect(choices).toEqual(["overwrite", "rename", "cancel"]);
+        return "overwrite";
+      },
+    });
+
+    await program.parseAsync(["node", "cc-switcher", "rename", "openrouter", "openrouter-v2"], {
+      from: "node",
+    });
+
+    const renamed = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.openrouter-v2.json"), "utf8")) as {
+      env: Record<string, string>;
+      model: string;
+    };
+
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(false);
+    expect(renamed.model).toBe("source-model");
+    expect(renamed.env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api");
+  });
+
+  test("rename can pick a new name when the target already exists", async () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+      model: "source-model",
+    });
+    writeJson(path.join(claudeDir, "settings.openrouter-v2.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://old.example.com" },
+      model: "target-model",
+    });
+
+    const prompts: string[] = [];
+    const program = createProgram({
+      claudeDir,
+      logger,
+      search: async (message, choices) => {
+        prompts.push(message);
+        expect(choices).toEqual(["overwrite", "rename", "cancel"]);
+        return "rename";
+      },
+      ask: async (message) => {
+        prompts.push(message);
+        return "openrouter-v3";
+      },
+    });
+
+    await program.parseAsync(["node", "cc-switcher", "rename", "openrouter", "openrouter-v2"], {
+      from: "node",
+    });
+
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter-v2.json"))).toBe(true);
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter-v3.json"))).toBe(true);
+    expect(prompts).toEqual([
+      "Profile openrouter-v2 already exists. What do you want to do?",
+      "New profile name",
+    ]);
   });
 
   test("edit supports json output", async () => {

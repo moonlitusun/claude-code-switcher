@@ -9,6 +9,7 @@ import {
   detectActiveProfile,
   editProfile,
   listProfiles,
+  renameProfile,
   readCurrentSettings,
   readProfile,
   switchProfile,
@@ -56,6 +57,7 @@ const HELP_EPILOG = [
   "  ccs create openrouter --base-url https://openrouter.ai/api --api-key sk-or-v1-your-key --json",
   "  ccs edit openrouter --model anthropic/claude-sonnet-4.6",
   "  ccs edit openrouter --model anthropic/claude-sonnet-4.6 --json",
+  "  ccs rename openrouter openrouter-v2",
   "  ccs delete openrouter --json",
   "",
   "Notes:",
@@ -299,13 +301,20 @@ export function createProgram(options: ProgramOptions = {}): Command {
         model?: string;
         json?: boolean;
       }>();
+      const resolvedProfile = await resolveCreateProfileName(profile, claudeDir, search, ask, logger);
+
+      if (!resolvedProfile) {
+        process.exitCode = 1;
+        return;
+      }
+
       const baseUrl = opts.baseUrl || (await ask("Base URL", "https://openrouter.ai/api"));
       const apiKey = opts.apiKey !== undefined ? opts.apiKey : await ask("API key", null);
       const model = opts.model || (await ask("Default model", "anthropic/claude-sonnet-4.6"));
 
       const created = createProfile(
         {
-          profile,
+          profile: resolvedProfile,
           baseUrl,
           apiKey,
           model,
@@ -315,7 +324,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
 
       if (opts.json) {
         printJson(logger, {
-          profile,
+          profile: resolvedProfile,
           created: true,
           model: created.model || null,
           baseUrl: created.env?.ANTHROPIC_BASE_URL || null,
@@ -323,7 +332,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
         return;
       }
 
-      logger.log(pc.green(`Created profile: ${profile}`));
+      logger.log(pc.green(`Created profile: ${resolvedProfile}`));
     });
 
   program
@@ -383,6 +392,35 @@ export function createProgram(options: ProgramOptions = {}): Command {
       }
 
       logger.log(pc.green(`Updated profile: ${profile}`));
+    });
+
+  program
+    .command("rename <profile> <next-profile>")
+    .description("Rename a Claude profile")
+    .option("--json", "Output rename result as JSON")
+    .action(async function (this: Command, profile: string, nextProfile: string) {
+      const opts = this.opts<{ json?: boolean }>();
+      const resolvedRename = await resolveRenameProfileName(profile, nextProfile, claudeDir, search, ask, logger);
+
+      if (!resolvedRename) {
+        process.exitCode = 1;
+        return;
+      }
+
+      renameProfile(profile, resolvedRename.nextProfile, claudeDir, {
+        overwrite: resolvedRename.overwrite,
+      });
+
+      if (opts.json) {
+        printJson(logger, {
+          profile,
+          nextProfile: resolvedRename.nextProfile,
+          renamed: true,
+        });
+        return;
+      }
+
+      logger.log(pc.green(`Renamed profile: ${profile} -> ${resolvedRename.nextProfile}`));
     });
 
   program
@@ -504,6 +542,104 @@ async function chooseProfile(search: SearchFn, claudeDir?: string): Promise<stri
   }
 
   return search("Choose a profile", profiles);
+}
+
+async function resolveCreateProfileName(
+  profile: string,
+  claudeDir: string | undefined,
+  search: SearchFn,
+  ask: AskFn,
+  logger: Logger
+): Promise<string | null> {
+  let current = profile;
+
+  while (true) {
+    const existing = readProfile(current, claudeDir);
+    if (!existing) {
+      return current;
+    }
+
+    const action = await search(`Profile ${current} already exists. What do you want to do?`, [
+      "overwrite",
+      "rename",
+      "cancel",
+    ]);
+
+    if (!action || action === "cancel") {
+      logger.error("Selection cancelled.");
+      return null;
+    }
+
+    if (action === "overwrite") {
+      return current;
+    }
+
+    const nextName = await ask("New profile name", null);
+    if (!nextName) {
+      logger.error("Selection cancelled.");
+      return null;
+    }
+
+    current = nextName.trim();
+    if (!current) {
+      logger.error("Selection cancelled.");
+      return null;
+    }
+  }
+}
+
+async function resolveRenameProfileName(
+  profile: string,
+  nextProfile: string,
+  claudeDir: string | undefined,
+  search: SearchFn,
+  ask: AskFn,
+  logger: Logger
+): Promise<{ nextProfile: string; overwrite: boolean } | null> {
+  let current = nextProfile.trim();
+
+  if (!current) {
+    logger.error("Selection cancelled.");
+    return null;
+  }
+
+  while (true) {
+    if (current === profile) {
+      return { nextProfile: current, overwrite: false };
+    }
+
+    const existing = readProfile(current, claudeDir);
+    if (!existing) {
+      return { nextProfile: current, overwrite: false };
+    }
+
+    const action = await search(`Profile ${current} already exists. What do you want to do?`, [
+      "overwrite",
+      "rename",
+      "cancel",
+    ]);
+
+    if (!action || action === "cancel") {
+      logger.error("Selection cancelled.");
+      return null;
+    }
+
+    if (action === "overwrite") {
+      return { nextProfile: current, overwrite: true };
+    }
+
+    const nextName = await ask("New profile name", null);
+    if (!nextName) {
+      logger.error("Selection cancelled.");
+      return null;
+    }
+
+    current = nextName.trim();
+    if (!current) {
+      logger.error("Selection cancelled.");
+      return null;
+    }
+  }
 }
 
 function readModel(settings: Settings): string | null {
