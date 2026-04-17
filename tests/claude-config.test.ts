@@ -11,6 +11,7 @@ import {
   editProfile,
   literalApiKeyHelper,
   listProfiles,
+  renameProfile,
   switchProfile,
   updateProfileModel,
 } from "../src/claude-config";
@@ -154,6 +155,17 @@ describe("claude config", () => {
     deleteProfile("openrouter", claudeDir);
 
     expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(false);
+  });
+
+  test("renames a profile file", () => {
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+    });
+
+    renameProfile("openrouter", "openrouter-v2", claudeDir);
+
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter.json"))).toBe(false);
+    expect(fs.existsSync(path.join(claudeDir, "settings.openrouter-v2.json"))).toBe(true);
   });
 
   test("edits an existing profile while preserving unrelated settings", () => {

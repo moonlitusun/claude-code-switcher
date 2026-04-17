@@ -137,6 +137,8 @@ If you skip flags, `create` prompts for the missing values:
 ccs create openrouter
 ```
 
+If a profile with the same name already exists, `create` will ask whether you want to overwrite it or choose a new name.
+
 ### Edit an existing profile
 
 ```bash
@@ -145,6 +147,15 @@ ccs edit openrouter --model openai/gpt-5-codex --json
 ```
 
 If you run `ccs edit openrouter` without flags, the CLI prompts for the current base URL, API key, and default model.
+
+### Rename a profile
+
+```bash
+ccs rename openrouter openrouter-v2
+ccs rename openrouter openrouter-v2 --json
+```
+
+If the target profile name already exists, `rename` will ask whether you want to overwrite it or choose a new name.
 
 ### Delete a profile
 
@@ -238,6 +249,17 @@ ccs edit openrouter
 ccs edit openrouter --model anthropic/claude-sonnet-4.6
 ccs edit openrouter --model anthropic/claude-sonnet-4.6 --json
 ```
+
+### `rename <profile> <next-profile>`
+
+Rename a saved profile.
+
+```bash
+ccs rename openrouter openrouter-v2
+ccs rename openrouter openrouter-v2 --json
+```
+
+If the target name already exists, `rename` asks whether to overwrite it or pick another name.
 
 ### `delete <profile>`
 
