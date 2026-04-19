@@ -85,10 +85,10 @@ export function createProgram(options: ProgramOptions = {}): Command {
   };
 
   program
-    .command("profiles")
-    .description("List saved Claude profiles")
+    .command("profiles [profile]")
+    .description("List saved Claude profiles or show a profile")
     .option("--json", "Output profiles as JSON")
-    .action(function (this: Command) {
+    .action(function (this: Command, profile?: string) {
       const opts = this.opts<{ json?: boolean }>();
       const profiles = listProfiles(claudeDir);
       const active = detectActiveProfile(claudeDir);
@@ -103,13 +103,42 @@ export function createProgram(options: ProgramOptions = {}): Command {
       }
 
       if (opts.json) {
+        if (profile) {
+          const selected = readProfile(profile, claudeDir);
+
+          if (!selected) {
+            logger.error(`Profile not found: ${profile}`);
+            process.exitCode = 1;
+            return;
+          }
+
+          printJson(logger, profilePayload(profile, selected));
+          return;
+        }
+
         printJson(logger, { active, profiles });
         return;
       }
 
-      profiles.forEach((name) => {
-        logger.log(`${name === active ? "* " : "  "}${name}`);
-      });
+      if (!profile) {
+        profiles.forEach((name) => {
+          logger.log(`${name === active ? "* " : "  "}${name}`);
+        });
+        return;
+      }
+
+      const selected = readProfile(profile, claudeDir);
+
+      if (!selected) {
+        logger.error(`Profile not found: ${profile}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      logger.log("");
+      logger.log(`Profile: ${profile}`);
+      logger.log(`Model: ${readModel(selected) || "(unset)"}`);
+      logger.log(`Base URL: ${selected.env?.ANTHROPIC_BASE_URL || "(native)"}`);
     });
 
   program
@@ -690,9 +719,25 @@ async function chooseModelForProfile(
   return search("Choose a model", modelIds);
 }
 
-function currentPayload(activeProfile: string, settings: Settings): { activeProfile: string; model: string | null; baseUrl: string | null } {
+function currentPayload(activeProfile: string, settings: Settings): {
+  activeProfile: string;
+  model: string | null;
+  baseUrl: string | null;
+} {
   return {
     activeProfile,
+    model: readModel(settings),
+    baseUrl: settings.env?.ANTHROPIC_BASE_URL || null,
+  };
+}
+
+function profilePayload(profile: string, settings: Settings): {
+  profile: string;
+  model: string | null;
+  baseUrl: string | null;
+} {
+  return {
+    profile,
     model: readModel(settings),
     baseUrl: settings.env?.ANTHROPIC_BASE_URL || null,
   };

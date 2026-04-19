@@ -170,11 +170,13 @@ For safety, the CLI refuses to delete the currently active profile.
 
 ### `profiles`
 
-List saved Claude profiles.
+List saved Claude profiles. Pass a profile name to show only that profile's details.
 
 ```bash
 ccs profiles
+ccs profiles quotio
 ccs profiles --json
+ccs profiles quotio --json
 ```
 
 ### `current`

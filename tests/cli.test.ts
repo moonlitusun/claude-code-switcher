@@ -60,6 +60,49 @@ describe("cli", () => {
     expect(payload.profiles).toEqual(["local-gateway", "openrouter"]);
   });
 
+  test("profiles shows a selected profile regardless of active", async () => {
+    writeJson(path.join(claudeDir, "settings.quotio.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+      model: "quotio",
+    });
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {});
+    writeJson(path.join(claudeDir, "settings.local-gateway.json"), {});
+    writeJson(path.join(claudeDir, "settings.json"), {});
+
+    const program = createProgram({ claudeDir, logger });
+    await program.parseAsync(["node", "cc-switcher", "profiles", "quotio"], { from: "node" });
+
+    expect(logs).toEqual([
+      "",
+      "Profile: quotio",
+      "Model: quotio",
+      "Base URL: https://openrouter.ai/api",
+    ]);
+  });
+
+  test("profiles supports json output for a selected profile", async () => {
+    writeJson(path.join(claudeDir, "settings.quotio.json"), {
+      env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },
+      model: "quotio",
+    });
+    writeJson(path.join(claudeDir, "settings.openrouter.json"), {});
+    writeJson(path.join(claudeDir, "settings.local-gateway.json"), {});
+    writeJson(path.join(claudeDir, "settings.json"), {});
+
+    const program = createProgram({ claudeDir, logger });
+    await program.parseAsync(["node", "cc-switcher", "profiles", "quotio", "--json"], { from: "node" });
+
+    const payload = JSON.parse(logs[0]) as {
+      profile: string;
+      model: string;
+      baseUrl: string;
+    };
+
+    expect(payload.profile).toBe("quotio");
+    expect(payload.model).toBe("quotio");
+    expect(payload.baseUrl).toBe("https://openrouter.ai/api");
+  });
+
   test("current supports json output", async () => {
     writeJson(path.join(claudeDir, "settings.openrouter.json"), {
       env: { ANTHROPIC_BASE_URL: "https://openrouter.ai/api" },

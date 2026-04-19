@@ -1,6 +1,6 @@
 {
   "name": "@sunday-sky/cc-switcher",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "CLI for switching Claude Code providers and models",
   "license": "MIT",
   "homepage": "https://github.com/rocsun/cc-switcher",
