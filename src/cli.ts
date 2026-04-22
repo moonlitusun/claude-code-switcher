@@ -51,7 +51,9 @@ const HELP_EPILOG = [
   "  ccs pick",
   "  ccs pick --vendor anthropic",
   "  ccs use",
+  "  ccs use -m openai/gpt-5-codex",
   "  ccs use openai/gpt-5-codex --profile openrouter",
+  "  ccs use -m openai/gpt-5-codex --profile openrouter",
   "  ccs use openai/gpt-5-codex --profile openrouter --json",
   "  ccs create openrouter --base-url https://openrouter.ai/api --api-key sk-or-v1-your-key",
   "  ccs create openrouter --base-url https://openrouter.ai/api --api-key sk-or-v1-your-key --json",
@@ -284,9 +286,10 @@ export function createProgram(options: ProgramOptions = {}): Command {
     .command("use [model]")
     .description("Set the default model for a profile")
     .option("-p, --profile <profile>", "Profile name to update")
+    .option("-m, --model <model>", "Model name to update")
     .option("--json", "Output update result as JSON")
     .action(async function (this: Command, model?: string) {
-      const opts = this.opts<{ profile?: string; json?: boolean }>();
+      const opts = this.opts<{ profile?: string; model?: string; json?: boolean }>();
       const profile = opts.profile || detectActiveProfile(claudeDir);
 
       if (!profile) {
@@ -295,7 +298,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
         return;
       }
 
-      const nextModel = model || (await chooseModelForProfile(profile, claudeDir, fetchModels, search, logger));
+      const nextModel = opts.model || model || (await chooseModelForProfile(profile, claudeDir, fetchModels, search, logger));
 
       if (!nextModel) {
         process.exitCode = 1;
@@ -704,7 +707,7 @@ async function chooseModelForProfile(
   const providerKind = detectProviderKind(settings?.env?.ANTHROPIC_BASE_URL);
 
   if (providerKind !== "openrouter") {
-    logger.error(`Interactive model selection is not supported yet for profile: ${profile}`);
+    logger.error(`Interactive model selection is not supported yet for profile: ${profile}. Use \`ccs use -m <model>\` instead.`);
     return null;
   }
 

@@ -84,12 +84,13 @@ In non-standard terminals or wrapped shells, the selector falls back to a simple
 ### 4. Update the model for the active profile
 
 ```bash
-ccs use anthropic/claude-sonnet-4.6
+ccs use -m anthropic/claude-sonnet-4.6
 ccs use anthropic/claude-sonnet-4.6 --json
 ```
 
 If you omit the model, `ccs use` opens an interactive vendor-and-model picker.
 It uses a searchable terminal UI when available, and falls back to a simpler prompt in terminals that do not behave well with advanced redraw output.
+For profiles that do not support model discovery, pass the model directly with `ccs use -m <model>`.
 
 ### 5. Pick a profile and model in one flow
 
@@ -225,7 +226,7 @@ Set the default model for the active profile, or for a profile passed with `--pr
 ```bash
 ccs use
 ccs use anthropic/claude-sonnet-4.6
-ccs use openai/gpt-5-codex --profile openrouter
+ccs use -m openai/gpt-5-codex --profile openrouter
 ccs use openai/gpt-5-codex --profile openrouter --json
 ```
 
@@ -284,7 +285,7 @@ The active Claude Code config is:
 
 When you run `ccs switch <profile>`, the tool merges the selected profile into `settings.json` while preserving unrelated user settings such as enabled plugins.
 
-When you run `ccs use <model>`, the tool updates:
+When you run `ccs use <model>` or `ccs use -m <model>`, the tool updates:
 
 - `model`
 - `env.ANTHROPIC_MODEL`
@@ -304,6 +305,7 @@ These commands support `--json`:
 - `ccs models [profile] [vendor] --json`
 - `ccs switch <profile> --json`
 - `ccs use <model> [--profile <name>] --json`
+- `ccs use -m <model> [--profile <name>] --json`
 - `ccs create <profile> --json`
 - `ccs edit <profile> --json`
 - `ccs delete <profile> --json`
@@ -322,7 +324,7 @@ Profiles are treated as OpenRouter profiles when `ANTHROPIC_BASE_URL` contains `
 
 ### Other providers
 
-Other profiles can still be switched and updated manually with `ccs use <model>`, but remote model discovery is not implemented yet.
+Other profiles can still be switched and updated manually with `ccs use -m <model>`, but remote model discovery is not implemented yet.
 
 ## Respectful Attribution
 

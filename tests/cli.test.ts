@@ -519,13 +519,33 @@ describe("cli", () => {
 
     const program = createProgram({ claudeDir, logger });
     await program.parseAsync(
-      ["node", "cc-switcher", "use", "openai/gpt-5-codex", "--profile", "openrouter", "--json"],
+      ["node", "cc-switcher", "use", "-m", "openai/gpt-5-codex", "--profile", "openrouter", "--json"],
       { from: "node" }
     );
 
     const payload = JSON.parse(logs[0]) as { profile: string; model: string };
     expect(payload.profile).toBe("openrouter");
     expect(payload.model).toBe("openai/gpt-5-codex");
+  });
+
+  test("use updates a non-discoverable profile with -m", async () => {
+    writeJson(path.join(claudeDir, "settings.local-gateway.json"), {
+      env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8317" },
+      model: "gateway-model",
+    });
+    writeJson(path.join(claudeDir, "settings.json"), {
+      env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8317" },
+      model: "gateway-model",
+    });
+
+    const program = createProgram({ claudeDir, logger });
+    await program.parseAsync(["node", "cc-switcher", "use", "-m", "openai/gpt-5-codex"], { from: "node" });
+
+    const active = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) as {
+      model: string;
+    };
+    expect(active.model).toBe("openai/gpt-5-codex");
+    expect(errors).toEqual([]);
   });
 
   test("use searches models directly when model is omitted", async () => {
